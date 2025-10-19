@@ -2,6 +2,26 @@
 
 本指南将帮助你在 Android 设备的 Termux 环境中安装和使用 SillyTavern Launcher CLI 版本。
 
+## 一键安装
+
+### 国际用户一键安装
+
+在 Termux 中执行以下命令即可一键安装：
+
+```bash
+curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux.sh | bash
+```
+
+### 中国大陆用户一键安装
+
+中国大陆用户可以使用以下命令进行一键安装（使用Gitee镜像加速）：
+
+```bash
+curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh | bash
+```
+
+安装完成后，执行 `source ~/.bashrc` 即可使用 `st` 或 `ST` 命令启动程序。
+
 ## 安装前准备
 
 1. 在 Google Play 或 F-Droid 中下载并安装 Termux 应用
@@ -34,11 +54,18 @@ pkg install -y python nodejs-lts git
 
 ### 4. 使用一键安装脚本
 
-项目包含一个安装脚本 [install_termux.sh](file:///e:/WorkProject/SillyTavernLauncher-For-Termux/install_termux.sh)，可以自动完成安装步骤：
+项目包含安装脚本，可以自动完成安装步骤：
 
+**国际用户：**
 ```bash
 # 下载并运行安装脚本
 curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux.sh | bash
+```
+
+**中国大陆用户：**
+```bash
+# 下载并运行安装脚本 (Gitee镜像)
+curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh | bash
 ```
 
 或者分步执行：
