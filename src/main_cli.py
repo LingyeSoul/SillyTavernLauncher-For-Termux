@@ -159,8 +159,16 @@ class SillyTavernCliLauncher:
             # 获取SillyTavern目录
             st_dir = os.path.join(os.getcwd(), "SillyTavern")
             if not os.path.exists(st_dir):
-                print("错误: SillyTavern 未安装，请先运行 install 命令")
-                return
+                # SillyTavern未安装，询问用户是否安装
+                choice = input("SillyTavern 未找到，是否立即安装？(Y/n): ")
+                if choice.lower() != 'n':
+                    self.install_sillytavern()
+                    if not os.path.exists(st_dir):
+                        print("安装似乎失败了，请检查错误信息")
+                        return
+                else:
+                    print("取消启动")
+                    return
             
             # 构建启动命令
             cmd = ["node", "server.js"]
