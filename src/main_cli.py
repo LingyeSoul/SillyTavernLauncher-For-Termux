@@ -1,13 +1,8 @@
 import argparse
-import sys
 import os
 import subprocess
-import threading
-import time
-import json
 import shutil
 from config import ConfigManager
-from version import VersionChecker
 from stconfig import stcfg
 
 class SillyTavernCliLauncher:

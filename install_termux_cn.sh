@@ -34,7 +34,7 @@ mkdir -p "$ST_LAUNCHER_DIR"
 cd "$ST_LAUNCHER_DIR"
 
 # 克隆项目文件 (使用Gitee镜像)
-echo "正在克隆 SillyTavernLauncher 仓库 (Gitee镜像)..."
+echo "正在克隆 SillyTavern Launcher 仓库 (Gitee镜像)..."
 if [ -d ".git" ]; then
     echo "目录中已存在Git仓库，正在更新..."
     git pull
@@ -78,16 +78,20 @@ chmod +x start.sh
 
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
+# 先清空可能已有的相关别名
+sed -i '/alias st=/d' $HOME/.bashrc
+sed -i '/alias ST=/d' $HOME/.bashrc
+
 echo "alias st='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
 echo "alias ST='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
 
 echo "========================================="
 echo "安装完成!"
 echo ""
-echo "请执行以下命令加载环境变量:"
-echo "  source ~/.bashrc"
+echo "正在自动加载环境变量..."
+source ~/.bashrc
 echo ""
-echo "然后可以使用以下命令之一启动程序:"
+echo "现在可以使用以下命令启动程序:"
 echo "  st --help"
 echo "  ST --help"
 echo ""
