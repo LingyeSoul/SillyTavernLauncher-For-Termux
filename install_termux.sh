@@ -87,6 +87,7 @@ pip install --upgrade aiohttp==3.12.4 ruamel.yaml packaging
 
 echo "SillyTavernLauncher 更新完成!"
 echo "运行 'st --help' 查看帮助信息"
+echo "运行 'st menu' 或直接运行 'st' 进入菜单界面"
 EOF
 
 chmod +x stl.sh
@@ -109,9 +110,11 @@ echo "正在自动加载环境变量..."
 source ~/.bashrc
 echo ""
 echo "现在可以使用以下命令:"
-echo "  st --help     (运行SillyTavernLauncher)"
-echo "  ST --help     (运行SillyTavernLauncher)"
-echo "  stl           (更新SillyTavernLauncher)"
+echo "  st             (进入菜单界面)"
+echo "  st menu        (进入菜单界面)"
+echo "  st --help      (查看帮助信息)"
+echo "  ST --help      (查看帮助信息)"
+echo "  stl            (更新SillyTavernLauncher)"
 echo ""
 echo "或者直接运行:"
 echo "  ./start.sh --help"
