@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# SillyTavern Launcher for Termux - 安装脚本
-# 用于在Termux环境中快速安装和配置SillyTavern Launcher CLI
+# SillyTavernLauncher for Termux - 安装脚本
+# 用于在Termux环境中快速安装和配置SillyTavernLauncher CLI
 
 echo "========================================="
-echo "SillyTavern Launcher for Termux 安装脚本"
+echo "SillyTavernLauncher for Termux 安装脚本"
 echo "========================================="
 
 # 检查是否在Termux环境中
@@ -31,7 +31,7 @@ mkdir -p "$ST_LAUNCHER_DIR"
 cd "$ST_LAUNCHER_DIR"
 
 # 克隆项目文件
-echo "正在克隆 SillyTavern Launcher 仓库..."
+echo "正在克隆 SillyTavernLauncher 仓库..."
 if [ -d ".git" ]; then
     echo "目录中已存在Git仓库，正在更新..."
     git pull
@@ -63,14 +63,44 @@ EOF
 
 chmod +x start.sh
 
+# 创建STL更新脚本
+echo "正在创建STL更新脚本..."
+cat > stl.sh << 'EOF'
+#!/bin/bash
+# STL (SillyTavernLauncher) 更新脚本
+
+echo "正在更新 SillyTavernLauncher..."
+
+# 进入项目目录
+cd "$HOME/SillytavernLauncher"
+
+# 拉取最新代码
+echo "正在获取最新代码..."
+git pull
+
+# 激活虚拟环境
+source venv/bin/activate
+
+# 更新Python依赖
+echo "正在更新Python依赖..."
+pip install --upgrade aiohttp==3.12.4 ruamel.yaml packaging
+
+echo "SillyTavernLauncher 更新完成!"
+echo "运行 'st --help' 查看帮助信息"
+EOF
+
+chmod +x stl.sh
+
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
 # 先清空可能已有的相关别名
 sed -i '/alias st=/d' $HOME/.bashrc
 sed -i '/alias ST=/d' $HOME/.bashrc
+sed -i '/alias stl=/d' $HOME/.bashrc
 
 echo "alias st='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
 echo "alias ST='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
+echo "alias stl='cd $HOME/SillytavernLauncher && source venv/bin/activate && bash stl.sh'" >> $HOME/.bashrc
 
 echo "========================================="
 echo "安装完成!"
@@ -78,9 +108,10 @@ echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
 echo ""
-echo "现在可以使用以下命令启动程序:"
-echo "  st --help"
-echo "  ST --help"
+echo "现在可以使用以下命令:"
+echo "  st --help     (运行SillyTavernLauncher)"
+echo "  ST --help     (运行SillyTavernLauncher)"
+echo "  stl           (更新SillyTavernLauncher)"
 echo ""
 echo "或者直接运行:"
 echo "  ./start.sh --help"
