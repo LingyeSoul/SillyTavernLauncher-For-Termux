@@ -22,19 +22,25 @@ pkg update -y
 echo "正在安装必要的包..."
 pkg install -y python nodejs-lts git
 
-# 创建项目目录
+# 创建项目目录 (使用用户主目录而不是根目录)
 echo "正在创建项目目录..."
-mkdir -p /SillytavernLauncher
+ST_LAUNCHER_DIR="$HOME/SillytavernLauncher"
+mkdir -p "$ST_LAUNCHER_DIR"
 
 # 进入项目目录
-cd /SillytavernLauncher
+cd "$ST_LAUNCHER_DIR"
 
 # 克隆项目文件
-echo "正在克隆 SillyTavern Launcher 仓库..."
-git clone https://github.com/LingyeSoul/SillyTavernLauncher-For-Termux.git .
-if [ $? -ne 0 ]; then
-    echo "错误: 克隆仓库失败"
-    exit 1
+echo "正在克隆 SillyTavernLauncher 仓库..."
+if [ -d ".git" ]; then
+    echo "目录中已存在Git仓库，正在更新..."
+    git pull
+else
+    git clone https://github.com/LingyeSoul/SillyTavernLauncher-For-Termux.git .
+    if [ $? -ne 0 ]; then
+        echo "错误: 克隆仓库失败"
+        exit 1
+    fi
 fi
 
 # 创建虚拟环境
@@ -50,7 +56,7 @@ pip install aiohttp==3.12.4 ruamel.yaml packaging
 echo "正在创建启动脚本..."
 cat > start.sh << 'EOF'
 #!/bin/bash
-cd /SillytavernLauncher
+cd "$HOME/SillytavernLauncher"
 source venv/bin/activate
 python src/main_cli.py "$@"
 EOF
@@ -59,8 +65,8 @@ chmod +x start.sh
 
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
-echo "alias st='cd /SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
-echo "alias ST='cd /SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
+echo "alias st='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
+echo "alias ST='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
 
 echo "========================================="
 echo "安装完成!"
