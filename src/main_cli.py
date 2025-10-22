@@ -209,8 +209,16 @@ class SillyTavernCliLauncher:
                     if output:
                         print(output.strip())
             except KeyboardInterrupt:
-                print("\n收到中断信号，正在停止...")
-                self.stop_sillytavern()
+                print("\n收到中断信号，正在退出...")
+                if self.running and self.process:
+                    print("正在终止进程...")
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+                    self.running = False
+                print("已停止")
             
             # 等待进程结束
             self.process.wait()
@@ -221,34 +229,6 @@ class SillyTavernCliLauncher:
             print(f"启动 SillyTavern 时出错: {e}")
             self.running = False
 
-    def stop_sillytavern(self):
-        """停止SillyTavern"""
-        if self.running and self.process:
-            print("正在停止 SillyTavern...")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-            self.running = False
-            print("SillyTavern 已停止")
-        else:
-            print("SillyTavern 未在运行")
-
-    def check_status(self):
-        """检查运行状态"""
-        # 检查SillyTavern是否已安装
-        st_dir = os.path.join(os.getcwd(), "SillyTavern")
-        if os.path.exists(st_dir):
-            print("SillyTavern: 已安装")
-        else:
-            print("SillyTavern: 未安装")
-        
-        # 检查运行状态
-        if self.running:
-            print("运行状态: 正在运行")
-        else:
-            print("运行状态: 未运行")
 
     def show_config(self):
         """显示当前配置"""
@@ -327,6 +307,75 @@ class SillyTavernCliLauncher:
         self.config_manager.save_config()
         print(f"GitHub 镜像已设置为: {mirror}")
 
+    def update_component(self, component):
+        """更新指定组件"""
+        if component == "st":
+            self.update_sillytavern()
+        elif component == "stl":
+            self.update_launcher()
+        else:
+            print(f"未知组件: {component}，支持的组件: st, stl")
+
+    def update_interactive(self):
+        """交互式更新选择"""
+        print("\n请选择要更新的内容:")
+        print("1. 更新 SillyTavern")
+        print("2. 更新 SillyTavernLauncher")
+        print("3. 更新所有内容")
+        print("0. 取消")
+        
+        choice = input("请输入选项 [0-3]: ").strip()
+        
+        if choice == "1":
+            self.update_sillytavern()
+        elif choice == "2":
+            self.update_launcher()
+        elif choice == "3":
+            self.update_sillytavern()
+            self.update_launcher()
+        elif choice == "0":
+            print("取消更新")
+        else:
+            print("无效选择")
+
+    def update_launcher(self):
+        """更新SillyTavernLauncher本身"""
+        print("正在更新 SillyTavernLauncher...")
+        
+        try:
+            # 获取当前目录（应该在SillyTavernLauncher目录中）
+            launcher_dir = os.getcwd()
+            print(f"工作目录: {launcher_dir}")
+            
+            # 拉取最新代码
+            print("正在拉取最新代码...")
+            success = self.run_command_with_output(["git", "pull"], cwd=launcher_dir)
+            if not success:
+                print("更新代码失败")
+                return
+            
+            # 更新Python依赖
+            print("正在更新Python依赖...")
+            # 激活虚拟环境并更新依赖
+            venv_python = os.path.join(launcher_dir, "venv", "bin", "python")
+            if not os.path.exists(venv_python):
+                venv_python = "python"  # 回退到系统python
+                
+            success = self.run_command_with_output([
+                venv_python, "-m", "pip", "install", "--upgrade", 
+                "aiohttp==3.12.4", "ruamel.yaml", "packaging"
+            ], cwd=launcher_dir)
+            
+            if not success:
+                print("依赖更新失败")
+                return
+            
+            print("SillyTavernLauncher 更新完成!")
+            
+        except Exception as e:
+            print(f"更新过程中出现未知错误: {e}")
+            return
+
     def show_menu(self):
         """显示菜单UI"""
         while True:
@@ -335,18 +384,17 @@ class SillyTavernCliLauncher:
             print("="*50)
             print("1. 安装 SillyTavern")
             print("2. 启动 SillyTavern")
-            print("3. 停止 SillyTavern")
-            print("4. 查看运行状态")
-            print("5. 显示配置")
-            print("6. 启用自启动")
-            print("7. 禁用自启动")
-            print("8. 更新 SillyTavern")
-            print("9. 设置 GitHub 镜像")
+            print("3. 显示配置")
+            print("4. 启用一键启动")
+            print("5. 禁用一键启动")
+            print("6. 更新 SillyTavern")
+            print("7. 更新 SillyTavernLauncher")
+            print("8. 设置 GitHub 镜像")
             print("0. 退出")
             print("="*50)
             
             try:
-                choice = input("请选择操作 [0-9]: ").strip()
+                choice = input("请选择操作 [0-8]: ").strip()
                 
                 if choice == "1":
                     self.install_sillytavern()
@@ -355,26 +403,33 @@ class SillyTavernCliLauncher:
                         self.start_sillytavern()
                     except KeyboardInterrupt:
                         print("\n收到中断信号，正在停止...")
-                        self.stop_sillytavern()
+                        # 需要保留停止功能以处理Ctrl+C
+                        if self.running and self.process:
+                            self.process.terminate()
+                            try:
+                                self.process.wait(timeout=10)
+                            except subprocess.TimeoutExpired:
+                                self.process.kill()
+                            self.running = False
                 elif choice == "3":
-                    self.stop_sillytavern()
-                elif choice == "4":
-                    self.check_status()
-                elif choice == "5":
                     self.show_config()
+                elif choice == "4":
+                    self.launch_direct()  # 一键启动功能
+                elif choice == "5":
+                    self.config_manager.set("autostart", False)
+                    self.config_manager.save_config()
+                    print("已禁用自启动")
                 elif choice == "6":
-                    self.setup_autostart()
-                elif choice == "7":
-                    self.disable_autostart()
-                elif choice == "8":
                     self.update_sillytavern()
-                elif choice == "9":
+                elif choice == "7":
+                    self.update_launcher()  # 更新launcher功能
+                elif choice == "8":
                     self.show_mirror_menu()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-9 之间的数字")
+                    print("无效选择，请输入 0-7 之间的数字")
                     
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
@@ -416,18 +471,38 @@ class SillyTavernCliLauncher:
 def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
-        "install", "start", "stop", "status", "config", 
-        "autostart-enable", "autostart-disable", "update", "menu", "set-mirror"
+        "install", "start", "launch", "config", 
+        "autostart", "update", "menu", "set-mirror"
     ], help="要执行的命令")
+    parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
     
     args = parser.parse_args()
     
     launcher = SillyTavernCliLauncher()
     
-    # 如果没有提供命令参数，则显示菜单
+    # 检查是否启用了"一键启动"功能
+    autostart_enabled = launcher.config_manager.get("autostart", False)
+    
+    # 如果没有提供命令参数
     if not args.command:
-        launcher.show_menu()
+        # 如果启用了"一键启动"功能，则直接启动SillyTavern
+        if autostart_enabled:
+            try:
+                launcher.start_sillytavern()
+            except KeyboardInterrupt:
+                print("\n收到中断信号，正在停止...")
+                # 需要保留停止功能以处理Ctrl+C
+                if launcher.running and launcher.process:
+                    launcher.process.terminate()
+                    try:
+                        launcher.process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        launcher.process.kill()
+                    launcher.running = False
+        else:
+            # 否则显示菜单
+            launcher.show_menu()
         return
     
     if args.command == "install":
@@ -437,19 +512,29 @@ def main():
             launcher.start_sillytavern()
         except KeyboardInterrupt:
             print("\n收到中断信号，正在停止...")
-            launcher.stop_sillytavern()
-    elif args.command == "stop":
-        launcher.stop_sillytavern()
-    elif args.command == "status":
-        launcher.check_status()
+            # 需要保留停止功能以处理Ctrl+C
+            if launcher.running and launcher.process:
+                launcher.process.terminate()
+                try:
+                    launcher.process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    launcher.process.kill()
+                launcher.running = False
+    elif args.command == "launch":
+        launcher.launch_direct()
     elif args.command == "config":
         launcher.show_config()
-    elif args.command == "autostart-enable":
-        launcher.setup_autostart()
-    elif args.command == "autostart-disable":
-        launcher.disable_autostart()
+    elif args.command == "autostart":
+        if args.subcommand:
+            launcher.autostart_control(args.subcommand)
+        else:
+            print("请指定autostart操作: enable 或 disable")
     elif args.command == "update":
-        launcher.update_sillytavern()
+        if args.subcommand:
+            launcher.update_component(args.subcommand)
+        else:
+            # 交互式更新选择
+            launcher.update_interactive()
     elif args.command == "menu":
         launcher.show_menu()
     elif args.command == "set-mirror":

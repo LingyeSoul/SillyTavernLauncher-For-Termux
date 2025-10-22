@@ -1,181 +1,78 @@
-# SillyTavernLauncher for Termux 使用指南
+# SillyTavernLauncher for Termux
 
-本指南将帮助你在 Android 设备的 Termux 环境中安装和使用 SillyTavernLauncher Termux 版本。
+一个为在 Android Termux 环境中运行 SillyTavern 而设计的命令行启动器。
 
-## 新功能
+## 功能特性
 
-- 启动 SillyTavern 时如果未安装会自动询问是否安装
-- 支持多种 GitHub 镜像站点以提高下载速度
-- 支持配置 NPM 镜像源以加快依赖安装
+- 一键安装 SillyTavern
+- 启动/停止 SillyTavern 服务
+- 查看运行状态与配置信息
+- 启用/禁用一键启动功能
+- 更新 SillyTavern 到最新版本
+- 更新 SillyTavernLauncher 本身
+- 支持 GitHub 镜像加速（特别针对中国大陆用户）
 
-## 一键安装
+## 安装方式
 
-### 国际用户一键安装
-
-在 Termux 中执行以下命令即可一键安装：
+### 国际用户
 
 ```bash
 curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux.sh | bash
 ```
 
-### 中国大陆用户一键安装
-
-中国大陆用户可以使用以下命令进行一键安装（使用Gitee镜像加速）：
+### 中国大陆用户
 
 ```bash
 curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh | bash
-```
-
-安装完成后，执行 `source ~/.bashrc` 即可使用 `st` 或 `ST` 命令启动程序。
-
-## 安装前准备
-
-1. 在 Github或 F-Droid 中下载并安装 Termux 应用
-2. 打开 Termux 应用并等待初始化完成
-
-## 安装步骤
-
-### 1. 设置存储权限
-
-```bash
-termux-setup-storage
-```
-
-### 2. 更新包管理器并更换镜像源（推荐）
-
-```bash
-# 更新包管理器
-pkg update -y
-
-# 更换为清华镜像源（可选但推荐）
-termux-change-repo
-# 选择清华镜像源以加快下载速度
-```
-
-### 3. 安装必要依赖
-
-```bash
-pkg install -y python nodejs-lts git
-```
-
-### 4. 使用一键安装脚本
-
-项目包含安装脚本，可以自动完成安装步骤：
-
-**国际用户：**
-```bash
-# 下载并运行安装脚本
-curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux.sh | bash
-```
-
-**中国大陆用户：**
-```bash
-# 下载并运行安装脚本 (Gitee镜像)
-curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh | bash
-```
-
-### 5. 手动安装方式
-
-```bash
-# 克隆项目到当前目录
-git clone https://github.com/LingyeSoul/SillyTavernLauncher-For-Termux.git
-cd SillyTavernLauncher-For-Termux
-```
-
-安装所需的 Python 依赖:
-```bash
-pip install ruamel.yaml packaging
 ```
 
 ## 使用方法
 
 安装完成后，可以使用以下命令：
 
+- `st` - 进入交互式菜单（默认）或直接启动SillyTavern（启用一键启动功能后）
+- `st menu` - 进入交互式菜单
+- `st install` - 安装 SillyTavern
+- `st start` - 启动 SillyTavern
+- `st launch` - 一键启动 SillyTavern（安装+启动）
+- `st update [component]` - 更新组件，component可以是 st（SillyTavern）或 stl（SillyTavernLauncher）
+- `st config` - 显示当前配置
+- `st autostart enable/disable` - 启用/禁用一键启动功能（输入st直接启动SillyTavern）
+- `st set-mirror --mirror <mirror>` - 设置 GitHub 镜像
+
+### 一键启动功能
+
+启用一键启动功能后，输入 `st` 将直接启动 SillyTavern 而不是显示菜单：
 ```bash
-# 查看帮助
-python src/main_cli.py --help
-
-# 安装 SillyTavern
-python src/main_cli.py install
-
-# 启动 SillyTavern (如果未安装会询问是否安装)
-python src/main_cli.py start
-
-# 停止 SillyTavern
-python src/main_cli.py stop
-
-# 查看运行状态
-python src/main_cli.py status
-
-# 查看配置
-python src/main_cli.py config
-
-# 启用自启动
-python src/main_cli.py autostart-enable
-
-# 禁用自启动
-python src/main_cli.py autostart-disable
-
-# 更新 SillyTavern
-python src/main_cli.py update
-
-# 设置GitHub镜像
-python src/main_cli.py set-mirror --mirror gh-proxy.com
+st autostart enable   # 启用一键启动
+st autostart disable  # 禁用一键启动
 ```
 
-## 快捷命令设置
+### 更新命令
 
-安装脚本会自动设置别名，安装完成后执行以下命令加载环境变量：
-
+使用 update 命令更新不同组件：
 ```bash
-source ~/.bashrc
+st update st   # 更新 SillyTavern
+st update stl  # 更新 SillyTavernLauncher 本身
 ```
 
-然后可以使用以下命令：
+当不带参数运行 `st update` 时，程序会询问要更新的内容：
+1. 更新 SillyTavern
+2. 更新 SillyTavernLauncher
+3. 更新所有内容
 
-```bash
-# 使用小写别名
-st --help
+### 可用的 GitHub 镜像
 
-# 使用大写别名
-ST --help
-```
+1. github.com (官方源)
+2. gh-proxy.com
+3. ghfile.geekertao.top
+4. gh.dpik.top
+5. github.dpik.top
+6. github.acmsz.top
+7. git.yylx.win
 
-## 故障排除
+中国大陆用户安装时会自动设置为 `gh-proxy.com` 镜像以加速下载。
 
-### 1. 如果遇到依赖安装问题
+## 许可证
 
-```bash
-# 升级 pip
-pip install --upgrade pip
-
-# 清除缓存重新安装
-pip cache purge
-pip install ruamel.yaml packaging
-```
-
-### 2. 如果 SillyTavern 启动失败
-
-检查日志输出，确保：
-- 所有依赖已正确安装
-- 端口未被其他应用占用
-- 设备有足够的存储空间
-
-### 3. 如果遇到Git或Node.js相关错误
-
-确保已正确安装系统依赖：
-```bash
-# 检查Git
-git --version
-
-# 检查Node.js
-node --version
-
-# 检查npm
-npm --version
-```
-
-如果未正确安装，请重新执行安装命令：
-```bash
-pkg install -y git nodejs-lts
-```
+MIT

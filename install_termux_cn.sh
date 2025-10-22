@@ -76,35 +76,6 @@ EOF
 
 chmod +x start.sh
 
-# 创建STL更新脚本
-echo "正在创建STL更新脚本..."
-cat > stl.sh << 'EOF'
-#!/bin/bash
-# STL (SillyTavernLauncher) 更新脚本
-
-echo "正在更新 SillyTavernLauncher..."
-
-# 进入项目目录
-cd "$HOME/SillytavernLauncher"
-
-# 拉取最新代码
-echo "正在获取最新代码..."
-git pull
-
-# 激活虚拟环境
-source venv/bin/activate
-
-# 更新Python依赖
-echo "正在更新Python依赖..."
-pip install --upgrade aiohttp==3.12.4 ruamel.yaml packaging
-
-echo "SillyTavernLauncher 更新完成!"
-echo "运行 'st --help' 查看帮助信息"
-echo "运行 'st menu' 或直接运行 'st' 进入菜单界面"
-EOF
-
-chmod +x stl.sh
-
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
 # 先清空可能已有的相关别名
@@ -114,7 +85,6 @@ sed -i '/alias stl=/d' $HOME/.bashrc
 
 echo "alias st='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
 echo "alias ST='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
-echo "alias stl='cd $HOME/SillytavernLauncher && source venv/bin/activate && bash stl.sh'" >> $HOME/.bashrc
 
 echo "========================================="
 echo "安装完成!"
@@ -127,13 +97,18 @@ echo "正在设置GitHub镜像为gh-proxy.com..."
 cd "$HOME/SillytavernLauncher"
 source venv/bin/activate
 python src/main_cli.py set-mirror --mirror gh-proxy.com
+
+# 自动安装并启动SillyTavern
+echo "正在自动安装并启动 SillyTavern..."
+python src/main_cli.py launch
+
 echo ""
 echo "现在可以使用以下命令:"
 echo "  st             (进入菜单界面)"
 echo "  st menu        (进入菜单界面)"
 echo "  st --help      (查看帮助信息)"
 echo "  ST --help      (查看帮助信息)"
-echo "  stl            (更新SillyTavernLauncher)"
+echo "  st update-launcher (更新SillyTavernLauncher)"
 echo ""
 echo "或者直接运行:"
 echo "  ./start.sh --help"
