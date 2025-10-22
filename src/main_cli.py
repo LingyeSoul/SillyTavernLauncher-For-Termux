@@ -312,7 +312,7 @@ class SillyTavernCliLauncher:
         if component == "st":
             self.update_sillytavern()
         elif component == "stl":
-            self.update_launcher()
+            self.update_launcher(True)  # 更新启动器后需要重启
         else:
             print(f"未知组件: {component}，支持的组件: st, stl")
 
@@ -329,16 +329,16 @@ class SillyTavernCliLauncher:
         if choice == "1":
             self.update_sillytavern()
         elif choice == "2":
-            self.update_launcher()
+            self.update_launcher(True)  # 更新启动器后需要重启
         elif choice == "3":
             self.update_sillytavern()
-            self.update_launcher()
+            self.update_launcher(True)  # 更新启动器后需要重启
         elif choice == "0":
             print("取消更新")
         else:
             print("无效选择")
 
-    def update_launcher(self):
+    def update_launcher(self, restart_after=False):
         """更新SillyTavernLauncher本身"""
         print("正在更新 SillyTavernLauncher...")
         
@@ -370,7 +370,19 @@ class SillyTavernCliLauncher:
                 print("依赖更新失败")
                 return
             
+            # 重载配置
+            self.config_manager.reload()
+            self.config = self.config_manager.config
+            
             print("SillyTavernLauncher 更新完成!")
+            
+            # 如果需要重启
+            if restart_after:
+                print("正在重新启动启动器...")
+                # 获取当前的参数
+                args = sys.argv[1:]  # 获取除脚本名外的所有参数
+                # 重新执行脚本
+                os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + args)
             
         except Exception as e:
             print(f"更新过程中出现未知错误: {e}")
@@ -414,15 +426,17 @@ class SillyTavernCliLauncher:
                 elif choice == "3":
                     self.show_config()
                 elif choice == "4":
-                    self.launch_direct()  # 一键启动功能
+                    self.config_manager.set("autostart", True)
+                    self.config_manager.save_config()
+                    print("已启用一键启动功能，输入st将直接启动SillyTavern")
                 elif choice == "5":
                     self.config_manager.set("autostart", False)
                     self.config_manager.save_config()
-                    print("已禁用自启动")
+                    print("已禁用一键启动功能，输入st将显示菜单")
                 elif choice == "6":
                     self.update_sillytavern()
                 elif choice == "7":
-                    self.update_launcher()  # 更新launcher功能
+                    self.update_launcher(True)  # 更新启动器后需要重启
                 elif choice == "8":
                     self.show_mirror_menu()
                 elif choice == "0":
