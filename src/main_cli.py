@@ -305,7 +305,7 @@ class SillyTavernCliLauncher:
             # 获取当前的参数
             args = sys.argv[1:]  # 获取除脚本名外的所有参数
             # 重新执行脚本
-            os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + args)
+            os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + ["menu"])
         elif choice == "0":
             print("取消更新")
         else:
@@ -352,10 +352,8 @@ class SillyTavernCliLauncher:
             # 如果需要重启
             if restart_after:
                 print("正在重新启动启动器...")
-                # 获取当前的参数
-                args = sys.argv[1:]  # 获取除脚本名外的所有参数
-                # 重新执行脚本
-                os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + args)
+                # 重新执行脚本，强制进入菜单模式
+                os.execv(sys.executable, [sys.executable] + ["menu"])
             
         except Exception as e:
             print(f"更新过程中出现未知错误: {e}")
