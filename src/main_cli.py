@@ -288,9 +288,10 @@ class SillyTavernCliLauncher:
         print("1. 更新 SillyTavern")
         print("2. 更新 SillyTavernLauncher")
         print("3. 更新所有内容")
+        print("4. 重启启动器")
         print("0. 取消")
         
-        choice = input("请输入选项 [0-3]: ").strip()
+        choice = input("请输入选项 [0-4]: ").strip()
         
         if choice == "1":
             self.update_sillytavern()
@@ -299,6 +300,12 @@ class SillyTavernCliLauncher:
         elif choice == "3":
             self.update_sillytavern()
             self.update_launcher(True)  # 更新启动器后需要重启
+        elif choice == "4":
+            print("正在重新启动启动器...")
+            # 获取当前的参数
+            args = sys.argv[1:]  # 获取除脚本名外的所有参数
+            # 重新执行脚本
+            os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + args)
         elif choice == "0":
             print("取消更新")
         else:
