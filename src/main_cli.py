@@ -184,50 +184,16 @@ class SillyTavernCliLauncher:
             print(f"启动命令: {' '.join(cmd)}")
             print(f"工作目录: {st_dir}")
             
-            # 启动进程
-            self.process = subprocess.Popen(
-                cmd,
-                cwd=st_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
+            # 切换到SillyTavern目录
+            os.chdir(st_dir)
             
-            self.running = True
-            print("SillyTavern 已启动，PID:", self.process.pid)
-            print("按 Ctrl+C 停止服务")
+            # 使用os.execvp替换当前进程
+            print("SillyTavern 已启动")
             print("-" * 50)
-            
-            # 实时输出日志
-            try:
-                while True:
-                    output = self.process.stdout.readline()
-                    if output == '' and self.process.poll() is not None:
-                        break
-                    if output:
-                        print(output.strip())
-            except KeyboardInterrupt:
-                print("\n收到中断信号，正在退出...")
-                if self.running and self.process:
-                    print("正在终止进程...")
-                    self.process.terminate()
-                    try:
-                        self.process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        self.process.kill()
-                    self.running = False
-                print("已停止")
-            
-            # 等待进程结束
-            self.process.wait()
-            self.running = False
-            print("SillyTavern 已停止")
+            os.execvp("node", cmd)
             
         except Exception as e:
             print(f"启动 SillyTavern 时出错: {e}")
-            self.running = False
 
 
     def show_config(self):
@@ -414,15 +380,9 @@ class SillyTavernCliLauncher:
                     try:
                         self.start_sillytavern()
                     except KeyboardInterrupt:
-                        print("\n收到中断信号，正在停止...")
-                        # 需要保留停止功能以处理Ctrl+C
-                        if self.running and self.process:
-                            self.process.terminate()
-                            try:
-                                self.process.wait(timeout=10)
-                            except subprocess.TimeoutExpired:
-                                self.process.kill()
-                            self.running = False
+                        print("\n收到中断信号，正在退出...")
+                        # 当使用execvp时，控制权已转移，这里不会捕获到子进程的中断
+                        pass
                 elif choice == "3":
                     self.show_config()
                 elif choice == "4":
@@ -505,15 +465,9 @@ def main():
             try:
                 launcher.start_sillytavern()
             except KeyboardInterrupt:
-                print("\n收到中断信号，正在停止...")
-                # 需要保留停止功能以处理Ctrl+C
-                if launcher.running and launcher.process:
-                    launcher.process.terminate()
-                    try:
-                        launcher.process.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        launcher.process.kill()
-                    launcher.running = False
+                print("\n收到中断信号，正在退出...")
+                # 当使用execvp时，控制权已转移，这里不会捕获到子进程的中断
+                pass
         else:
             # 否则显示菜单
             launcher.show_menu()
