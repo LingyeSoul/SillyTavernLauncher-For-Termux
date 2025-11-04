@@ -469,12 +469,7 @@ def main():
     if not args.command:
         # 如果启用了"一键启动"功能，则直接启动SillyTavern
         if autostart_enabled:
-            try:
-                launcher.start_sillytavern()
-            except KeyboardInterrupt:
-                print("\n收到中断信号，正在退出...")
-                # 当使用execvp时，控制权已转移，这里不会捕获到子进程的中断
-                pass
+            launcher.start_sillytavern()
         else:
             # 否则显示菜单
             launcher.show_menu()
@@ -496,12 +491,21 @@ def main():
                     launcher.process.kill()
                 launcher.running = False
     elif args.command == "launch":
-        launcher.launch_direct()
+            launcher.start_sillytavern()
     elif args.command == "config":
         launcher.show_config()
     elif args.command == "autostart":
         if args.subcommand:
-            launcher.autostart_control(args.subcommand)
+            if args.subcommand == "enable":
+                launcher.config_manager.set("autostart", True)
+                launcher.config_manager.save_config()
+                print("已启用一键启动功能")
+            elif args.subcommand == "disable":
+                launcher.config_manager.set("autostart", False)
+                launcher.config_manager.save_config()
+                print("已禁用一键启动功能")
+            else:
+                print("无效的操作，请使用 enable 或 disable")
         else:
             print("请指定autostart操作: enable 或 disable")
     elif args.command == "update":
