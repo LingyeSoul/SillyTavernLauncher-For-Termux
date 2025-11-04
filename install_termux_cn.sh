@@ -76,6 +76,17 @@ EOF
 
 chmod +x start.sh
 
+# 创建简化启动脚本
+echo "正在创建简化启动脚本..."
+cat > st << 'EOF'
+#!/bin/bash
+cd "$HOME/SillytavernLauncher"
+source venv/bin/activate
+python src/main_cli.py "$@"
+EOF
+
+chmod +x st
+
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
 # 先清空可能已有的相关别名
@@ -83,8 +94,11 @@ sed -i '/alias st=/d' $HOME/.bashrc
 sed -i '/alias ST=/d' $HOME/.bashrc
 sed -i '/alias stl=/d' $HOME/.bashrc
 
-echo "alias st='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
-echo "alias ST='cd $HOME/SillytavernLauncher && source venv/bin/activate && python src/main_cli.py'" >> $HOME/.bashrc
+echo "alias st='$HOME/SillytavernLauncher/st'" >> $HOME/.bashrc
+echo "alias ST='$HOME/SillytavernLauncher/st'" >> $HOME/.bashrc
+
+# 确保脚本在当前会话中可用
+export PATH="$HOME/SillytavernLauncher:$PATH"
 
 echo "========================================="
 echo "安装完成!"
