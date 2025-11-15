@@ -108,12 +108,20 @@ class SillyTavernCliLauncher:
                 shutil.rmtree(st_dir)
         
         try:
-            # 获取镜像地址
-            mirror_url = self.get_github_mirror()
-            repo_url = f"{mirror_url}/SillyTavern/SillyTavern.git"
+            # 获取镜像配置
+            mirror = self.config_manager.get("github.mirror", "github")
+            
+            # 根据是否使用镜像决定仓库地址
+            if mirror == "github":
+                # 使用GitHub官方仓库
+                repo_url = "https://github.com/SillyTavern/SillyTavern.git"
+                print(f"正在克隆 SillyTavern 仓库 (使用官方源)...")
+            else:
+                # 使用Gitee镜像仓库
+                repo_url = "https://gitee.com/lingyesoul/SillyTavern.git"
+                print(f"正在克隆 SillyTavern 仓库 (使用Gitee镜像)...")
             
             # 克隆SillyTavern仓库
-            print(f"正在克隆 SillyTavern 仓库 (使用镜像: {mirror_url})...")
             success = self.run_command_with_output([
                 "git", "clone", repo_url, "SillyTavern"
             ])
@@ -272,6 +280,58 @@ class SillyTavernCliLauncher:
         self.config_manager.set("github.mirror", mirror)
         self.config_manager.save_config()
         print(f"GitHub 镜像已设置为: {mirror}")
+        
+        # 配置Git全局设置
+        try:
+            # 清除现有的GitHub镜像配置
+            clear_result = subprocess.run(
+                ["git", "config", "--global", "--unset-all", "url.https://github.com/.insteadof"],
+                capture_output=True, text=True
+            )
+            
+            # 如果使用镜像且不是官方源，则配置Git全局镜像
+            if mirror != "github":
+                # 配置GitHub镜像
+                mirror_url = f"https://{mirror}/https://github.com/"
+                subprocess.run(
+                    ["git", "config", "--global", f"url.{mirror_url}.insteadof", "https://github.com/"],
+                    check=True, capture_output=True, text=True
+                )
+                print(f"Git全局镜像已配置: {mirror_url} -> https://github.com/")
+                
+                # 如果SillyTavern已经安装，还需要切换其远程地址
+                st_dir = os.path.join(os.getcwd(), "SillyTavern")
+                if os.path.exists(st_dir) and os.path.exists(os.path.join(st_dir, ".git")):
+                    # 切换SillyTavern仓库远程地址为Gitee镜像
+                    result = subprocess.run(
+                        ["git", "remote", "set-url", "origin", "https://gitee.com/lingyesoul/SillyTavern.git"],
+                        cwd=st_dir,
+                        capture_output=True, text=True
+                    )
+                    
+                    if result.returncode == 0:
+                        print("SillyTavern仓库远程地址已切换到Gitee镜像")
+                    else:
+                        print(f"切换SillyTavern仓库远程地址失败: {result.stderr}")
+            else:
+                # 使用官方源时，如果有SillyTavern目录，尝试切换回官方地址
+                st_dir = os.path.join(os.getcwd(), "SillyTavern")
+                if os.path.exists(st_dir) and os.path.exists(os.path.join(st_dir, ".git")):
+                    result = subprocess.run(
+                        ["git", "remote", "set-url", "origin", "https://github.com/SillyTavern/SillyTavern.git"],
+                        cwd=st_dir,
+                        capture_output=True, text=True
+                    )
+                    
+                    if result.returncode == 0:
+                        print("SillyTavern仓库远程地址已切换回官方地址")
+                    else:
+                        print(f"切换SillyTavern仓库远程地址失败: {result.stderr}")
+                        
+        except subprocess.CalledProcessError as e:
+            print(f"配置Git全局镜像时出错: {e}")
+        except Exception as e:
+            print(f"配置Git全局镜像时发生未知错误: {e}")
 
     def update_component(self, component):
         """更新指定组件"""
