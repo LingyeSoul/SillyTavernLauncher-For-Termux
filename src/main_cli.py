@@ -482,7 +482,7 @@ class SillyTavernCliLauncher:
         """显示镜像设置菜单"""
         print("\nGitHub 镜像设置:")
         print("1. github.com (官方源)")
-        print("2. gh-proxy.com")
+        print("2. gh-proxy.org")
         print("3. ghfile.geekertao.top")
         print("4. gh.dpik.top")
         print("5. github.dpik.top")
@@ -494,7 +494,7 @@ class SillyTavernCliLauncher:
         
         mirror_map = {
             "1": "github",
-            "2": "gh-proxy.com",
+            "2": "gh-proxy.org",
             "3": "ghfile.geekertao.top",
             "4": "gh.dpik.top",
             "5": "github.dpik.top",
@@ -580,7 +580,7 @@ def main():
         if args.mirror:
             launcher.set_github_mirror(args.mirror)
         else:
-            print("请提供镜像源参数，例如: st set-mirror --mirror gh-proxy.com")
+            print("请提供镜像源参数，例如: st set-mirror --mirror gh-proxy.org")
 
 if __name__ == "__main__":
     main()
