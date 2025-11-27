@@ -63,7 +63,7 @@ EOF
 
 # 安装Python依赖
 echo "正在安装Python依赖..."
-pip install aiohttp==3.12.4 ruamel.yaml packaging
+pip install aiohttp==3.12.4 ruamel.yaml packaging flask requests
 
 # 创建启动脚本
 echo "正在创建启动脚本..."
