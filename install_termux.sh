@@ -50,7 +50,13 @@ source venv/bin/activate
 
 # 安装Python依赖
 echo "正在安装Python依赖..."
-pip install aiohttp==3.12.4 ruamel.yaml packaging
+# 优先从requirements.txt安装，确保版本一致性
+if [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
+else
+    # 备用方案：安装核心依赖
+    pip install ruamel.yaml flask requests
+fi
 
 # 创建启动脚本
 echo "正在创建启动脚本..."

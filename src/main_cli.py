@@ -861,11 +861,19 @@ class SillyTavernCliLauncher:
             venv_python = os.path.join(launcher_dir, "venv", "bin", "python")
             if not os.path.exists(venv_python):
                 venv_python = "python"  # 回退到系统python
-                
-            success = self.run_command_with_output([
-                venv_python, "-m", "pip", "install", "--upgrade", 
-                "aiohttp==3.12.4", "ruamel.yaml", "packaging"
-            ], cwd=launcher_dir)
+
+            # 优先从requirements.txt安装依赖，确保版本一致性
+            requirements_path = os.path.join(launcher_dir, "requirements.txt")
+            if os.path.exists(requirements_path):
+                success = self.run_command_with_output([
+                    venv_python, "-m", "pip", "install", "-r", "requirements.txt"
+                ], cwd=launcher_dir)
+            else:
+                # 备用方案：直接安装核心依赖
+                success = self.run_command_with_output([
+                    venv_python, "-m", "pip", "install", "--upgrade",
+                    "ruamel.yaml", "flask", "requests"  # 只安装实际使用的依赖
+                ], cwd=launcher_dir)
             
             if not success:
                 print("依赖更新失败")

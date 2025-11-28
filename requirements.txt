@@ -1,3 +1,6 @@
-aiohttp==3.12.4
+# 核心依赖
 ruamel.yaml
-packaging
+
+# 同步服务器依赖
+flask
+requests
