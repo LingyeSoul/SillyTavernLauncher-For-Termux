@@ -45,7 +45,8 @@ class SyncClient:
             os.path.join(os.getcwd(), "SillyTavern", "data", "default-user"),
             os.path.join(os.getcwd(), "data", "default-user"),
             os.path.expanduser("~/SillyTavern/data/default-user"),
-            "./SillyTavern/data/default-user"
+            "./SillyTavern/data/default-user",
+            "./backup/default-user"  # 添加备份目录
         ]
 
         for path in possible_paths:
@@ -331,7 +332,10 @@ class SyncClient:
             print("本地数据目录为空，无需备份")
             return True
 
-        backup_path = f"{self.data_path}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Create backup in ./backup folder
+        backup_dir = "./backup"
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_path = os.path.join(backup_dir, f"default-user.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}")
 
         try:
             print(f"备份现有数据到: {backup_path}")
