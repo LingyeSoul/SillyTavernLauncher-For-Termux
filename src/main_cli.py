@@ -453,96 +453,7 @@ class SillyTavernCliLauncher:
             # Fallback to common local IPs
             return "127.0.0.1"
 
-    def _scan_sync_servers(self, ports=None):
-        """扫描本地网络中的同步服务器"""
-        if ports is None:
-            ports = [9999, 5000, 8080, 8081, 8082, 9000]
-
-        try:
-            from sync_client import SyncClient
-        except ImportError:
-            print("错误: 无法导入同步客户端模块")
-            return
-
-        local_ip = self._get_local_ip()
-        if not local_ip or local_ip == "127.0.0.1":
-            print("无法获取本地IP地址，请手动输入服务器地址")
-            return
-
-        # 获取网络前缀
-        ip_parts = local_ip.split('.')
-        network_prefix = '.'.join(ip_parts[:3]) + '.'
-
-        print(f"扫描网络范围: {network_prefix}1-254")
-        print("扫描端口:", ', '.join(map(str, ports)))
-        print("-" * 50)
-
-        found_servers = []
-
-        # 扫描常用IP段和端口
-        for port in ports:
-            # 首先检查本地
-            if self._check_sync_server(f"http://127.0.0.1:{port}"):
-                found_servers.append(f"127.0.0.1:{port}")
-
-            # 检查当前IP
-            if self._check_sync_server(f"http://{local_ip}:{port}"):
-                found_servers.append(f"{local_ip}:{port}")
-
-            # 扫描同网络段的部分IP（限制扫描范围以提高速度）
-            for i in [1, 2, 100, 101, 254]:  # 常用的网关地址
-                if i != int(ip_parts[3]):  # 跳过自己的IP
-                    test_ip = network_prefix + str(i)
-                    if self._check_sync_server(f"http://{test_ip}:{port}"):
-                        found_servers.append(f"{test_ip}:{port}")
-
-        print("\n扫描完成!")
-        if found_servers:
-            print(f"发现 {len(found_servers)} 个可用的同步服务器:")
-            print("-" * 40)
-            for i, server in enumerate(found_servers, 1):
-                print(f"{i}. http://{server}")
-            print("-" * 40)
-
-            try:
-                choice = input("请选择服务器编号或按Enter继续: ").strip()
-                if choice and choice.isdigit() and 1 <= int(choice) <= len(found_servers):
-                    selected_server = found_servers[int(choice) - 1]
-                    self._connect_and_sync(f"http://{selected_server}")
-
-                    # 询问是否将此服务器保存为快捷连接
-                    save_choice = input("是否保存此服务器地址为快捷连接？(y/N): ").strip()
-                    if save_choice.lower() == 'y':
-                        saved_servers = self.config_manager.get("sync.saved_servers", [])
-                        server_url = f"http://{selected_server}"
-                        if server_url not in saved_servers:
-                            saved_servers.append(server_url)
-                            self.config_manager.set("sync.saved_servers", saved_servers)
-                            self.config_manager.save_config()
-                            print(f"服务器已保存: {server_url}")
-                        else:
-                            print("此服务器已在保存列表中")
-            except (ValueError, KeyboardInterrupt):
-                print("\n取消操作")
-        else:
-            print("未发现可用的同步服务器")
-            print("请确保:")
-            print("1. 其他设备上的同步服务器已启动")
-            print("2. 防火墙允许端口访问")
-            print("3. 设备在同一网络中")
-
-    def _check_sync_server(self, server_url, timeout=3):
-        """检查同步服务器是否可用"""
-        try:
-            from sync_client import SyncClient
-            client = SyncClient(server_url, timeout=timeout)
-            if client.check_server_health():
-                print(f"✓ 发现服务器: {server_url}")
-                return True
-            return False
-        except Exception:
-            return False
-
+    
     def _connect_and_sync(self, server_url):
         """连接到服务器并执行同步"""
         try:
@@ -706,11 +617,10 @@ class SillyTavernCliLauncher:
             print("\n选项:")
             print("1. 启动同步服务器")
             print("2. 停止同步服务器")
-            print("3. 从服务器同步数据")
+            print("3. 从服务器同步数据 (支持 IP:端口 格式)")
             print("4. 显示同步配置")
-            print("5. 测试服务器连接")
+            print("5. 测试服务器连接 (支持 IP:端口 格式)")
             print("6. 设置同步服务器端口")
-            print("7. 扫描本地同步服务器")
             saved_servers = self.config_manager.get("sync.saved_servers", [])
             if saved_servers:
                 print("8. 已保存的服务器列表")
@@ -723,7 +633,9 @@ class SillyTavernCliLauncher:
                 if choice == "1":
                     if not sync_enabled:
                         print("正在启动同步服务器...")
-                        self.start_sync_server()
+                        success = self.start_sync_server()
+                        if not success:
+                            print("启动失败，请检查配置和网络设置")
                     else:
                         print("同步服务器已在运行")
                 elif choice == "2":
@@ -733,8 +645,19 @@ class SillyTavernCliLauncher:
                     else:
                         print("同步服务器未运行")
                 elif choice == "3":
-                    server_url = input("请输入服务器地址 (例如: http://192.168.1.100:5000): ").strip()
+                    server_url = input("请输入服务器地址 (例如: 192.168.1.100:5000): ").strip()
                     if server_url:
+                        # 自动处理IP:端口格式
+                        if ':' in server_url and not server_url.startswith(('http://', 'https://')):
+                            ip, port = server_url.split(':', 1)
+                            server_url = f"http://{ip}:{port}"
+                            print(f"连接到服务器: {server_url}")
+                        elif server_url.startswith(('http://', 'https://')):
+                            print(f"连接到服务器: {server_url}")
+                        else:
+                            print("格式错误，请使用 IP:端口 格式，例如: 192.168.1.100:5000")
+                            continue
+
                         print("请选择同步方法:")
                         print("1. 自动 (优先ZIP，失败后增量)")
                         print("2. ZIP全量同步")
@@ -763,9 +686,14 @@ class SillyTavernCliLauncher:
                         local_ip = self._get_local_ip()
                         print(f"  客户端地址: http://{local_ip}:{sync_port}")
                 elif choice == "5":
-                    server_url = input("请输入服务器地址进行测试: ").strip()
+                    server_url = input("请输入服务器地址进行测试 (例如: 192.168.1.100:5000): ").strip()
                     if server_url:
                         try:
+                            # 自动处理IP:端口格式
+                            if ':' in server_url and not server_url.startswith(('http://', 'https://')):
+                                ip, port = server_url.split(':', 1)
+                                server_url = f"http://{ip}:{port}"
+
                             from sync_client import SyncClient
                             client = SyncClient(server_url)
                             if client.check_server_health():
@@ -773,10 +701,11 @@ class SillyTavernCliLauncher:
                                 if server_info:
                                     info = server_info.get('server_info', {})
                                     print("服务器连接正常!")
+                                    print(f"  服务器地址: {server_url}")
                                     print(f"  文件数量: {info.get('file_count', 0)}")
                                     print(f"  总大小: {client._format_size(info.get('total_size', 0))}")
                             else:
-                                print("服务器连接失败")
+                                print(f"服务器连接失败: {server_url}")
                         except Exception as e:
                             print(f"测试连接失败: {e}")
                 elif choice == "6":
@@ -804,10 +733,6 @@ class SillyTavernCliLauncher:
                             print("端口未修改")
                     except ValueError:
                         print("错误: 请输入有效的端口号")
-                elif choice == "7":
-                    # 扫描本地同步服务器
-                    print("正在扫描本地同步服务器...")
-                    self._scan_sync_servers()
                 elif choice == "8":
                     # 处理已保存的服务器列表
                     self._manage_saved_servers()

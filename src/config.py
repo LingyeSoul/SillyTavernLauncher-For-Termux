@@ -21,6 +21,11 @@ class ConfigManager:
                     "mirror": "github"
                 },
                 "autostart": False,
+                "sync": {
+                    "enabled": False,
+                    "port": 9999,
+                    "host": "0.0.0.0",
+                }
                 }
         self.config = self.load_config()
         
