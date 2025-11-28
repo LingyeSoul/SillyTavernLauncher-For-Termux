@@ -17,7 +17,7 @@ import time
 
 
 class SyncServer:
-    def __init__(self, data_path=None, port=5000, host='0.0.0.0'):
+    def __init__(self, data_path=None, port=9999, host='0.0.0.0'):
         """
         Initialize sync server
 
@@ -271,8 +271,8 @@ def main():
     parser = argparse.ArgumentParser(description='SillyTavern 数据同步服务器')
     parser.add_argument('--data-path', '-d',
                        help='SillyTavern数据目录路径 (默认自动检测)')
-    parser.add_argument('--port', '-p', type=int, default=5000,
-                       help='服务器端口 (默认: 5000)')
+    parser.add_argument('--port', '-p', type=int, default=9999,
+                       help='服务器端口 (默认: 9999)')
     parser.add_argument('--host', default='0.0.0.0',
                        help='服务器主机地址 (默认: 0.0.0.0)')
     parser.add_argument('--block', action='store_true',

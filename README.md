@@ -78,69 +78,6 @@ st update stl  # 更新 SillyTavernLauncher 本身
 
 中国大陆用户安装时会自动设置为 `gh-proxy.com` 镜像以加速下载。
 
-## 🔄 数据同步功能
-
-### PC 版安装 (Windows)
-
-自动安装：
-```bash
-curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_pc_sync.py | python
-```
-
-或手动安装：
-```bash
-python install_pc_sync.py --create-shortcuts
-```
-
-### 基本同步流程
-
-1. **启动同步服务器** (数据源设备):
-```bash
-# PC 端
-python src\pc_launcher.py --sync-start
-
-# Termux 端
-st sync start --port 5000
-```
-
-2. **从服务器同步数据** (目标设备):
-```bash
-# PC 端
-python src\pc_launcher.py --sync-from http://192.168.1.100:5000
-
-# Termux 端 (自动检测)
-st sync from --server-url http://192.168.1.100:5000
-```
-
-3. **同时运行 SillyTavern 和同步服务**:
-```bash
-# PC 端
-python src\pc_launcher.py --all
-
-# Termux 端 (需要两个终端)
-st start
-st sync start --port 5001
-```
-
-### 高级同步选项
-
-```bash
-# 选择同步方法
-st sync from --server-url http://192.168.1.100:5000 --method zip
-
-# 不备份现有数据
-st sync from --server-url http://192.168.1.100:5000 --no-backup
-
-# 自定义端口
-st sync start --port 8080
-
-# 网络检测和自动同步
-python src/sync_termux.py detect-and-sync
-```
-
-### 更多信息
-
-详细使用说明请参考: [DATA_SYNC_MANUAL.md](DATA_SYNC_MANUAL.md)
 
 ## 许可证
 
