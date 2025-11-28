@@ -35,95 +35,210 @@ class TermuxSyncManager:
         print(f"SillyTavern 目录: {self.st_dir}")
         print(f"数据目录: {self.data_dir}")
 
-    def detect_network_servers(self, timeout=5, port=5000):
+    def detect_network_servers(self, timeout=3, port=9999):
         """Detect SillyTavern sync servers on local network"""
         print("正在扫描局域网中的 SillyTavern 同步服务器...")
 
         try:
             # Get local IP and network range
             import socket
+            import threading
+            from queue import Queue
+            import requests
+            import time
+
+            # 更可靠地获取本地IP
+            local_ip = self._get_local_ip()
+            if not local_ip or local_ip == "127.0.0.1":
+                print("无法获取有效的本地IP地址")
+                print("请确保设备已连接到局域网")
+                return []
+
+            # Extract network segment
+            ip_parts = local_ip.split('.')
+            if len(ip_parts) != 4:
+                print(f"无效的IP地址格式: {local_ip}")
+                return []
+
+            network_base = '.'.join(ip_parts[:3])
+            last_octet = int(ip_parts[3])
+
+            print(f"本地IP地址: {local_ip}")
+            print(f"扫描网络段: {network_base}.0/24")
+            print(f"扫描端口: {port}")
+
+            result_queue = Queue()
+            threads = []
+            found_servers = []
+
+            def check_ip(ip):
+                """检查指定IP是否有同步服务器"""
+                url = f"http://{ip}:{port}/health"
+                try:
+                    response = requests.get(url, timeout=timeout)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('status') == 'healthy':
+                            result_queue.put((ip, True, data))
+                    else:
+                        result_queue.put((ip, False, None))
+                except Exception:
+                    result_queue.put((ip, False, None))
+
+            # 根据网络类型采用不同的扫描策略
+            scan_targets = []
+
+            if local_ip.startswith('192.168'):
+                # 常用家庭网络，扫描优先级IP
+                priority_ips = [1, 2, 254, last_octet-1, last_octet+1]  # 网关、常用设备、相邻IP
+                normal_range = list(range(1, 255))
+
+                # 优先扫描
+                for i in priority_ips:
+                    if 1 <= i <= 254 and i != last_octet:
+                        scan_targets.append(f"{network_base}.{i}")
+
+                # 添加其他IP到扫描列表（限制数量以提高速度）
+                for i in normal_range:
+                    if i not in priority_ips and i != last_octet:
+                        scan_targets.append(f"{network_base}.{i}")
+                        if len(scan_targets) >= 30:  # 限制扫描数量
+                            break
+
+            elif local_ip.startswith('10.'):
+                # 企业网络，限制扫描范围
+                # 只扫描当前子网段的部分IP
+                for i in range(max(1, last_octet-10), min(254, last_octet+10)):
+                    if i != last_octet:
+                        scan_targets.append(f"{network_base}.{i}")
+
+            elif local_ip.startswith('172'):
+                # 172.16-31.x.x 网络
+                if len(ip_parts) >= 2 and 16 <= int(ip_parts[1]) <= 31:
+                    # 只扫描当前子网
+                    for i in range(max(1, last_octet-5), min(254, last_octet+5)):
+                        if i != last_octet:
+                            scan_targets.append(f"{network_base}.{i}")
+
+            else:
+                # 其他网络类型，只扫描相邻的几个IP
+                for i in range(max(1, last_octet-3), min(254, last_octet+3)):
+                    if i != last_octet:
+                        scan_targets.append(f"{network_base}.{i}")
+
+            # 添加本地主机检测
+            scan_targets.insert(0, "127.0.0.1")
+            scan_targets.insert(1, local_ip)
+
+            print(f"将扫描 {len(scan_targets)} 个IP地址...")
+
+            # 启动扫描线程（限制并发数）
+            max_threads = 10
+            for i, ip in enumerate(scan_targets):
+                thread = threading.Thread(target=check_ip, args=(ip,))
+                threads.append(thread)
+                thread.start()
+
+                # 控制并发线程数量
+                if (i + 1) % max_threads == 0:
+                    time.sleep(0.1)
+
+            # 等待所有线程完成
+            for thread in threads:
+                thread.join(timeout=timeout+1)
+
+            # 收集结果
+            while not result_queue.empty():
+                ip, success, data = result_queue.get()
+                if success:
+                    found_servers.append((ip, data))
+
+            # 显示结果
+            if found_servers:
+                print(f"\n发现 {len(found_servers)} 个 SillyTavern 同步服务器:")
+                print("-" * 60)
+                for i, (ip, data) in enumerate(found_servers, 1):
+                    data_path = data.get('data_path', 'N/A')
+                    timestamp = data.get('timestamp', 'N/A')
+                    print(f"  {i}. {ip}:{port}")
+                    print(f"     数据路径: {data_path}")
+                    print(f"     状态时间: {timestamp}")
+                print("-" * 60)
+
+                return [(f"http://{ip}:{port}", data) for ip, data in found_servers]
+            else:
+                print(f"\n未发现端口 {port} 上的 SillyTavern 同步服务器")
+                print("请确保:")
+                print("  1. 目标设备已启动 SillyTavern 同步服务")
+                print("  2. 设备在同一局域网内")
+                print("  3. 防火墙允许端口访问")
+                print("  4. 服务器使用的是默认端口 9999")
+                return []
+
+        except Exception as e:
+            print(f"网络扫描失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _get_local_ip(self):
+        """获取本地IP地址 - Termux环境优化版本"""
+        import subprocess
+        import re
+        import socket
+
+        # 方法1：使用ipconfig命令获取局域网IP（Termux最可靠）
+        try:
+            # Termux使用ipconfig命令
+            result = subprocess.run(['ipconfig'], capture_output=True, text=True, timeout=10)
+            output = result.stdout
+
+            # 查找IPv4地址，排除127.0.0.1和169.254.x.x
+            ip_pattern = r'IPv4 Address[ .]*: ([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})'
+            matches = re.findall(ip_pattern, output)
+
+            # 过滤有效的局域网IP
+            lan_ips = []
+            for ip in matches:
+                if (ip != '127.0.0.1' and
+                    not ip.startswith('169.254.') and  # APIPA地址
+                    not ip.startswith('255.') and
+                    not ip.startswith('0.')):
+                    lan_ips.append(ip)
+
+            # 优先选择192.168.x.x和10.x.x.x网段
+            for ip in lan_ips:
+                if ip.startswith('192.168.') or ip.startswith('10.'):
+                    return ip
+
+            # 如果没有找到，返回第一个有效的局域网IP
+            if lan_ips:
+                return lan_ips[0]
+
+        except Exception as e:
+            print(f"ipconfig命令失败: {e}")
+
+        # 方法2：回退到socket方法
+        try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
             s.close()
 
-            # Extract network segment
-            ip_parts = local_ip.split('.')
-            network_base = '.'.join(ip_parts[:3])
+            # 验证IP地址格式并确保是局域网IP
+            parts = local_ip.split('.')
+            if (len(parts) == 4 and
+                all(0 <= int(p) <= 255 for p in parts) and
+                local_ip != "127.0.0.1" and
+                (local_ip.startswith('192.168.') or
+                 local_ip.startswith('10.') or
+                 local_ip.startswith('172.'))):
+                return local_ip
+        except:
+            pass
 
-            print(f"本地IP地址: {local_ip}")
-            print(f"扫描网络段: {network_base}.0/24")
-
-            # Scan network range
-            import threading
-            from queue import Queue
-            import requests
-
-            result_queue = Queue()
-            threads = []
-
-            def check_ip(ip):
-                url = f"http://{ip}:{port}/health"
-                try:
-                    response = requests.get(url, timeout=2)
-                    if response.status_code == 200:
-                        data = response.json()
-                        result_queue.put((ip, True, data))
-                    else:
-                        result_queue.put((ip, False, None))
-                except:
-                    result_queue.put((ip, False, None))
-
-            # Check common IP range (192.168.x.x and 10.x.x.x)
-            if local_ip.startswith('192.168'):
-                # Scan last octet from 1 to 254
-                for i in range(1, 255):
-                    ip = f"{network_base}.{i}"
-                    if ip != local_ip:  # Skip self
-                        thread = threading.Thread(target=check_ip, args=(ip,))
-                        threads.append(thread)
-                        thread.start()
-
-            elif local_ip.startswith('10.'):
-                # Scan limited range for 10.x.x.x networks
-                ip_parts[2] = '0'  # Reset third octet
-                network_base = '.'.join(ip_parts[:3])
-                for i in range(1, 100):  # Limited scan for large networks
-                    ip = f"{network_base}.{i}"
-                    if ip != local_ip:
-                        thread = threading.Thread(target=check_ip, args=(ip,))
-                        threads.append(thread)
-                        thread.start()
-
-            # Wait for threads to complete
-            for thread in threads:
-                thread.join()
-
-            # Collect results
-            servers = []
-            while not result_queue.empty():
-                ip, success, data = result_queue.get()
-                if success:
-                    servers.append((ip, data))
-
-            if servers:
-                print(f"\n发现 {len(servers)} 个 SillyTavern 同步服务器:")
-                for i, (ip, data) in enumerate(servers, 1):
-                    data_path = data.get('data_path', 'N/A')
-                    timestamp = data.get('timestamp', 'N/A')
-                    print(f"  {i}. {ip}:{port} - 数据路径: {data_path} - 时间: {timestamp}")
-                return [(f"http://{ip}:{port}", data) for ip, data in servers]
-            else:
-                print("\n未发现 SillyTavern 同步服务器")
-                print("请确保:")
-                print("  1. 目标设备已启动 SillyTavern 同步服务")
-                print("  2. 设备在同一局域网内")
-                print("  3. 防火墙允许端口 5000 访问")
-                return []
-
-        except Exception as e:
-            print(f"网络扫描失败: {e}")
-            return []
+        # 最后回退
+        return "127.0.0.1"
 
     def sync_from_detected_server(self, method='auto', backup=True):
         """Sync from detected server with interactive selection"""
