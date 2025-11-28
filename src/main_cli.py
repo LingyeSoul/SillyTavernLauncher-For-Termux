@@ -361,32 +361,57 @@ class SillyTavernCliLauncher:
             )
 
             # Start server in background
-            self.sync_server.start(block=False)
+            if self.sync_server.start(block=False):
+                # Get local IP address for client connections
+                local_ip = self._get_local_ip()
+                print(f"数据同步服务已启动!")
+                print(f"服务器地址: http://{local_ip}:{port}")
+                print(f"本地地址: http://localhost:{port}")
+                print(f"数据路径: {data_path}")
+                print("\n可用接口:")
+                print("  /manifest    - 获取文件清单")
+                print("  /zip         - 下载所有数据(ZIP)")
+                print("  /file?path=  - 下载指定文件")
+                print("  /health      - 健康检查")
+                print("  /info        - 服务器信息")
 
-            # Get local IP address for client connections
-            local_ip = self._get_local_ip()
-            print(f"数据同步服务已启动!")
-            print(f"服务器地址: http://{local_ip}:{port}")
-            print(f"本地地址: http://localhost:{port}")
-            print(f"数据路径: {data_path}")
-            print("\n可用接口:")
-            print("  /manifest    - 获取文件清单")
-            print("  /zip         - 下载所有数据(ZIP)")
-            print("  /file?path=  - 下载指定文件")
-            print("  /health      - 健康检查")
-            print("  /info        - 服务器信息")
+                # Save sync server config only after successful start
+                self.config_manager.set("sync.enabled", True)
+                self.config_manager.set("sync.port", port)
+                self.config_manager.set("sync.host", host)
+                self.config_manager.save_config()
 
-            # Save sync server config
-            self.config_manager.set("sync.enabled", True)
-            self.config_manager.set("sync.port", port)
-            self.config_manager.set("sync.host", host)
-            self.config_manager.save_config()
-
-            return True
+                return True
+            else:
+                print("启动同步服务器失败")
+                self.sync_server = None
+                return False
 
         except Exception as e:
             print(f"启动同步服务器失败: {e}")
             return False
+
+    def get_sync_server_status(self):
+        """获取同步服务器的真实状态"""
+        is_running = self.sync_server is not None and self.sync_server.running
+        config_enabled = self.config_manager.get("sync.enabled", False)
+
+        return {
+            "running": is_running,
+            "config_enabled": config_enabled,
+            "consistent": is_running == config_enabled,
+            "port": self.config_manager.get("sync.port", 9999),
+            "host": self.config_manager.get("sync.host", "0.0.0.0")
+        }
+
+    def sync_config_with_actual_state(self):
+        """同步配置与实际服务器状态"""
+        status = self.get_sync_server_status()
+        if not status["consistent"]:
+            self.config_manager.set("sync.enabled", status["running"])
+            self.config_manager.save_config()
+            return True
+        return False
 
     def stop_sync_server(self):
         """停止数据同步服务器"""
@@ -605,14 +630,29 @@ class SillyTavernCliLauncher:
             print("数据同步菜单")
             print("="*50)
 
-            sync_enabled = self.config_manager.get("sync.enabled", False)
-            sync_port = self.config_manager.get("sync.port", 9999)
-            sync_host = self.config_manager.get("sync.host", "0.0.0.0")
+            # 获取真实的同步服务器状态
+            status = self.get_sync_server_status()
 
-            print(f"当前同步状态: {'启用' if sync_enabled else '禁用'}")
-            if sync_enabled:
+            # 显示详细状态信息
+            if status["running"]:
+                status_text = "运行中"
+                status_color = "✓"
+            else:
+                status_text = "已停止"
+                status_color = "✗"
+
+            if not status["consistent"]:
+                status_text += f" (状态不一致，配置: {'启用' if status['config_enabled'] else '禁用'})"
+                status_color = "⚠"
+
+            print(f"当前同步服务器状态: {status_color} {status_text}")
+            if status["running"]:
                 local_ip = self._get_local_ip()
-                print(f"服务器地址: http://{local_ip}:{sync_port}")
+                print(f"服务器地址: http://{local_ip}:{status['port']}")
+                print(f"本地地址: http://localhost:{status['port']}")
+            elif status["config_enabled"]:
+                print(f"配置端口: {status['port']}")
+                print("注意: 配置显示启用，但服务器实际未运行")
 
             print("\n选项:")
             print("1. 启动同步服务器")
@@ -621,9 +661,14 @@ class SillyTavernCliLauncher:
             print("4. 显示同步配置")
             print("5. 测试服务器连接 (支持 IP:端口 格式)")
             print("6. 设置同步服务器端口")
+            if not status["consistent"]:
+                print("7. 修复状态不一致问题")
             saved_servers = self.config_manager.get("sync.saved_servers", [])
             if saved_servers:
-                print("8. 已保存的服务器列表")
+                option_num = 8
+                if status["consistent"]:
+                    option_num = 7
+                print(f"{option_num}. 已保存的服务器列表")
             print("0. 返回主菜单")
             print("="*50)
 
@@ -631,7 +676,7 @@ class SillyTavernCliLauncher:
                 choice = input("请选择操作 [0-8]: ").strip()
 
                 if choice == "1":
-                    if not sync_enabled:
+                    if not status["running"]:
                         print("正在启动同步服务器...")
                         success = self.start_sync_server()
                         if not success:
@@ -639,7 +684,7 @@ class SillyTavernCliLauncher:
                     else:
                         print("同步服务器已在运行")
                 elif choice == "2":
-                    if sync_enabled:
+                    if status["running"]:
                         print("正在停止同步服务器...")
                         self.stop_sync_server()
                     else:
@@ -677,14 +722,16 @@ class SillyTavernCliLauncher:
                         self.sync_from_server(server_url, method, backup)
                 elif choice == "4":
                     print("当前同步配置:")
-                    print(f"  启用状态: {sync_enabled}")
-                    print(f"  监听主机: {sync_host}")
-                    print(f"  监听端口: {sync_port}")
-                    if sync_enabled:
+                    print(f"  实际运行状态: {'运行中' if status['running'] else '已停止'}")
+                    print(f"  配置启用状态: {'启用' if status['config_enabled'] else '禁用'}")
+                    print(f"  状态一致性: {'一致' if status['consistent'] else '不一致'}")
+                    print(f"  监听主机: {status['host']}")
+                    print(f"  监听端口: {status['port']}")
+                    if status["running"]:
                         data_path = os.path.join(os.getcwd(), "SillyTavern", "data", "default-user")
                         print(f"  数据路径: {data_path}")
                         local_ip = self._get_local_ip()
-                        print(f"  客户端地址: http://{local_ip}:{sync_port}")
+                        print(f"  客户端地址: http://{local_ip}:{status['port']}")
                 elif choice == "5":
                     server_url = input("请输入服务器地址进行测试 (例如: 192.168.1.100:5000): ").strip()
                     if server_url:
@@ -721,18 +768,25 @@ class SillyTavernCliLauncher:
                                 print(f"同步服务器端口已设置为: {port_num}")
 
                                 # 如果服务器正在运行，询问是否重启
-                                if sync_enabled and self.sync_server:
+                                if status["running"] and self.sync_server:
                                     restart = input("同步服务器正在运行，是否重启以应用新端口？(Y/n): ").strip()
                                     if restart.lower() != 'n':
                                         print("正在重启同步服务器...")
                                         self.stop_sync_server()
-                                        self.start_sync_server(sync_port, sync_host)
+                                        self.start_sync_server(port_num, status['host'])
                             else:
                                 print("错误: 端口号必须在 1-65535 范围内")
                         else:
                             print("端口未修改")
                     except ValueError:
                         print("错误: 请输入有效的端口号")
+                elif choice == "7" and not status["consistent"]:
+                    # 修复状态不一致问题
+                    print("正在修复状态不一致问题...")
+                    if self.sync_config_with_actual_state():
+                        print("状态已修复，配置已同步到实际运行状态")
+                    else:
+                        print("状态已经一致，无需修复")
                 elif choice == "8":
                     # 处理已保存的服务器列表
                     self._manage_saved_servers()
