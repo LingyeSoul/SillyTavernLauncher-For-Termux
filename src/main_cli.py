@@ -897,15 +897,22 @@ class SillyTavernCliLauncher:
             print(f"更新过程中出现未知错误: {e}")
             return
 
-    def start_webui(self, host='127.0.0.1', port=8080):
-        """启动WebUI"""
+    def start_webui(self, host='127.0.0.1', port=8080, start_browser=True):
+        """启动现代化WebUI"""
         try:
-            from webui import start_webui
+            from webui_server import start_webui_server
             print(f"正在启动 WebUI...")
-            print(f"访问地址: http://{host}:{port}")
-            start_webui(host=host, port=port, start_browser=True)
+            print(f"本地访问地址: http://{host}:{port}")
+            if host == "0.0.0.0":
+                local_ip = self._get_local_ip()
+                print(f"网络访问地址: http://{local_ip}:{port}")
+            print("按 Ctrl+C 停止 WebUI 服务器")
+
+            # 启动WebUI服务器
+            start_webui_server(host=host, port=port)
         except ImportError:
-            print("错误: 未找到 WebUI 模块或 remi 依赖")
+            print("错误: 未找到 WebUI 服务器模块或 Flask 依赖")
+            print("请确保已安装所需依赖: pip install flask flask-cors flask-socketio")
         except Exception as e:
             print(f"启动 WebUI 失败: {e}")
 
@@ -923,8 +930,8 @@ class SillyTavernCliLauncher:
             print("6. 更新 SillyTavern")
             print("7. 更新 SillyTavernLauncher")
             print("8. 设置 GitHub 镜像")
-            print("9. 数据同步(测试中)")
-            print("10. 启动 WebUI (测试)")
+            print("9. 数据同步")
+            print("10. 启动WebUI (测试)")
             print("0. 退出")
             print("="*50)
             
@@ -1007,7 +1014,7 @@ def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync"
+        "autostart", "update", "menu", "set-mirror", "sync", "webui"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1017,6 +1024,10 @@ def main():
     parser.add_argument("--method", choices=['auto', 'zip', 'incremental'],
                        default='auto', help="同步方法")
     parser.add_argument("--no-backup", action='store_true', help="同步时不备份现有数据")
+    parser.add_argument("--webui-port", type=int, default=8080, help="WebUI服务器端口")
+    parser.add_argument("--webui-host", default='127.0.0.1', help="WebUI服务器主机地址")
+    parser.add_argument("--remote", action='store_true', help="允许远程访问WebUI (绑定到 0.0.0.0)")
+    parser.add_argument("--no-browser", action='store_true', help="启动WebUI时不自动打开浏览器")
     
     args = parser.parse_args()
     
@@ -1114,6 +1125,48 @@ def main():
             print("  st sync start --port 8080")
             print("  st sync from --server-url http://192.168.1.100:5000")
             print("  st sync from --server-url http://192.168.1.100:5000 --method zip")
+    elif args.command == "webui":
+        # 设置WebUI主机和端口
+        webui_host = "0.0.0.0" if args.remote else args.webui_host
+        webui_port = args.webui_port
+        start_browser = not args.no_browser
+
+        print("\n" + "="*50)
+        print("启动现代化 WebUI (MDUI2)")
+        print("="*50)
+        print(f"WebUI服务器地址: {webui_host}:{webui_port}")
+        print(f"自动打开浏览器: {'是' if start_browser else '否'}")
+        if args.remote:
+            local_ip = launcher._get_local_ip()
+            print(f"网络访问地址: http://{local_ip}:{webui_port}")
+        print("="*50)
+        print("\n按 Ctrl+C 停止 WebUI 服务器\n")
+
+        launcher.start_webui(host=webui_host, port=webui_port, start_browser=start_browser)
+    else:
+        print("可用命令:")
+        print("  install                   - 安装 SillyTavern")
+        print("  start                     - 启动 SillyTavern")
+        print("  launch                    - 启动 SillyTavern (别名)")
+        print("  config                    - 显示当前配置")
+        print("  autostart enable/disable  - 启用/禁用一键启动")
+        print("  update <component>       - 更新组件 (st, stl)")
+        print("  menu                      - 显示交互式菜单")
+        print("  set-mirror --mirror <x>  - 设置GitHub镜像源")
+        print("  sync <subcommand>        - 数据同步操作")
+        print("  webui                     - 启动现代化WebUI (MDUI2)")
+        print("")
+        print("WebUI可选参数:")
+        print("  --webui-port <port>       - WebUI服务器端口 (默认: 8080)")
+        print("  --webui-host <host>       - WebUI服务器主机地址 (默认: 127.0.0.1)")
+        print("  --remote                  - 允许远程访问 (绑定到 0.0.0.0)")
+        print("  --no-browser              - 启动WebUI时不自动打开浏览器")
+        print("")
+        print("示例:")
+        print("  st webui")
+        print("  st webui --webui-port 9000")
+        print("  st webui --remote")
+        print("  st webui --webui-port 9000 --remote --no-browser")
 
 if __name__ == "__main__":
     main()
