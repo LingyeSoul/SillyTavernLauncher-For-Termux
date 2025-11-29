@@ -55,7 +55,7 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 else
     # 备用方案：安装核心依赖
-    pip install ruamel.yaml flask requests
+    pip install ruamel.yaml flask requests remi
 fi
 
 # 创建启动脚本

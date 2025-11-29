@@ -78,7 +78,3 @@ st update stl  # 更新 SillyTavernLauncher 本身
 
 中国大陆用户安装时会自动设置为 `gh-proxy.com` 镜像以加速下载。
 
-
-## 许可证
-
-MIT
