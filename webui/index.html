@@ -454,8 +454,9 @@
                                     <mdui-button
                                         variant="outlined"
                                         onclick="openSillyTavern()"
-                                        style="width: 100%; margin: 4px;"
-                                        id="open-st-btn">
+                                        style="width: 100%; margin: 4px; opacity: 0.5;"
+                                        id="open-st-btn"
+                                        disabled>
                                         <mdui-icon name="open_in_browser"></mdui-icon>
                                         打开 SillyTavern
                                     </mdui-button>
@@ -1251,6 +1252,43 @@
             } catch (error) {
                 addLog(`更新过程中出错: ${error.message}`);
                 showSnackbar(`更新出错: ${error.message}`, 'error');
+            }
+        }
+
+              async function startSillyTavern() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.startSillyTavern !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.startSillyTavern === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+
+            addLog('正在启动 SillyTavern...');
+            try {
+                const result = await window.API.startSillyTavern();
+                if (result.success) {
+                    addLog('SillyTavern 启动成功');
+                    showSnackbar('启动成功', 'success');
+
+                    // 等待一下让SillyTavern完全启动，然后启用打开按钮
+                    setTimeout(() => {
+                        const openBtn = document.getElementById('open-st-btn');
+                        if (openBtn) {
+                            openBtn.disabled = false;
+                            openBtn.style.opacity = '1';
+                        }
+                    }, 3000);
+                } else {
+                    addLog(`启动失败: ${result.message}`);
+                    showSnackbar(`启动失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`启动过程中出错: ${error.message}`);
+                showSnackbar(`启动出错: ${error.message}`, 'error');
             }
         }
 
