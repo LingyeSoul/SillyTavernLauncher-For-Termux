@@ -1,0 +1,330 @@
+/* MDUI2 简化版本 - 基础样式 */
+:root {
+  --md-sys-color-primary: #6750a4;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-secondary: #625b71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-tertiary: #7d5260;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-surface: #fffbfe;
+  --md-sys-color-on-surface: #1c1b1f;
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-background: #fffbfe;
+  --md-sys-color-on-background: #1c1b1f;
+  --md-sys-color-outline: #79747e;
+  --md-sys-color-shadow: #000000;
+  --md-sys-typescale-body-medium: 400 0.875rem/1.25 Roboto;
+  --md-sys-typescale-body-large: 400 1rem/1.5 Roboto;
+  --md-sys-typescale-headline-small: 400 1.75rem/1.43 Roboto;
+  --md-sys-typescale-headline-medium: 400 2.25rem/1.33 Roboto;
+  --md-sys-shape-corner-none: 0px;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-space-stage: 8px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+  line-height: 1.5;
+}
+
+/* Material Design 基础组件样式 */
+.mdui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-small);
+  background-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mdui-btn:hover {
+  background-color: #5238a0;
+}
+
+.mdui-btn-outlined {
+  background-color: transparent;
+  border: 1px solid var(--md-sys-color-primary);
+  color: var(--md-sys-color-primary);
+}
+
+.mdui-btn-outlined:hover {
+  background-color: rgba(103, 80, 164, 0.08);
+}
+
+.mdui-text-field {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0;
+}
+
+.mdui-text-field input,
+.mdui-text-field textarea {
+  padding: 12px 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-small);
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.mdui-text-field input:focus,
+.mdui-text-field textarea:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 2px rgba(103, 80, 164, 0.2);
+}
+
+.mdui-card {
+  background-color: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-medium);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+  margin: 16px;
+  overflow: hidden;
+}
+
+.mdui-top-app-bar {
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 0 16px;
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.mdui-layout-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-top: 64px;
+}
+
+.mdui-navigation-drawer {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100vh;
+  background-color: var(--md-sys-color-surface);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  transition: left 0.3s ease;
+  z-index: 999;
+}
+
+.mdui-navigation-drawer.mdui-drawer-open {
+  left: 0;
+}
+
+.mdui-list-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mdui-list-item:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.mdui-bottom-app-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 56px;
+  background-color: var(--md-sys-color-surface);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+.mdui-checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background-color: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.mdui-checkbox:checked {
+  background-color: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+.mdui-checkbox:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+}
+
+.mdui-select {
+  padding: 12px 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-small);
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.mdui-progress {
+  height: 4px;
+  background-color: rgba(103, 80, 164, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mdui-progress-bar {
+  height: 100%;
+  background-color: var(--md-sys-color-primary);
+  transition: width 0.3s ease;
+}
+
+.mdui-snackbar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #323232;
+  color: white;
+  padding: 14px 24px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  max-width: 344px;
+}
+
+.mdui-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-large);
+  box-shadow: 0 11px 15px -7px rgba(0, 0, 0, 0.2);
+  z-index: 2000;
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.mdui-dialog-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.mdui-dialog-content {
+  padding: 16px 24px;
+}
+
+.mdui-dialog-actions {
+  padding: 16px 24px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .mdui-top-app-bar {
+    padding: 0 8px;
+  }
+
+  .mdui-card {
+    margin: 8px;
+    border-radius: var(--md-sys-shape-corner-small);
+  }
+
+  .mdui-dialog {
+    width: 95%;
+    border-radius: var(--md-sys-shape-corner-medium);
+  }
+}
+
+/* 工具类 */
+.hidden {
+  display: none !important;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mt-1 { margin-top: 8px; }
+.mt-2 { margin-top: 16px; }
+.mt-3 { margin-top: 24px; }
+.mb-1 { margin-bottom: 8px; }
+.mb-2 { margin-bottom: 16px; }
+.mb-3 { margin-bottom: 24px; }
+.p-1 { padding: 8px; }
+.p-2 { padding: 16px; }
+.p-3 { padding: 24px; }
+
+/* 布局 */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.control-section {
+  margin-bottom: 24px;
+}
+
+.log-container {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sync-status {
+  padding: 8px;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
+.sync-running {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  border: 1px solid #4caf50;
+}
+
+.sync-stopped {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #f44336;
+}

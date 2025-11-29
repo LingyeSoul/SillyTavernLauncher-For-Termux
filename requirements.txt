@@ -1,9 +1,12 @@
 # 核心依赖
 ruamel.yaml
 
-# 同步服务器依赖
+# WebUI服务器依赖（Flask版本）
 flask
+flask-cors
+flask-socketio
+eventlet  # 用于Flask-SocketIO的高性能WebSocket支持
+
+# 同步服务器依赖
 requests
 
-# WebUI 依赖
-remi

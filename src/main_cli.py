@@ -872,7 +872,7 @@ class SillyTavernCliLauncher:
                 # 备用方案：直接安装核心依赖
                 success = self.run_command_with_output([
                     venv_python, "-m", "pip", "install", "--upgrade",
-                    "ruamel.yaml", "flask","remi", "requests"  # 只安装实际使用的依赖
+                    "ruamel.yaml", "flask", "requests"  # 只安装实际使用的依赖
                 ], cwd=launcher_dir)
             
             if not success:

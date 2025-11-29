@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SillyTavern WebUI 控制面板</title>
+
+    <!-- MDUI2 CSS -->
+    <link rel="stylesheet" href="static/mdui.css" />
+
+    <!-- 自定义样式 -->
+    <style>
+        :root {
+            --primary-color: #4285f4;
+            --secondary-color: #34a853;
+            --accent-color: #ea4335;
+            --warn-color: #fbbc05;
+            --dark-color: #202124;
+            --light-color: #ffffff;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --transition-speed: 0.3s;
+        }
+
+        .mdui-theme-dark {
+            --card-bg: rgba(45, 45, 45, 0.8);
+        }
+
+        .page-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* 添加顶部边距，避免内容被顶栏遮挡 */
+        mdui-layout-main {
+            padding-top: 80px;
+        }
+
+        /* 为页面内容添加额外的偏移，确保在对话框关闭后也不会被顶栏遮挡 */
+        .page-content {
+            scroll-margin-top: 100px;
+        }
+
+        /* 为所有卡片添加顶部安全距离 */
+        .status-card, .control-section {
+            scroll-margin-top: 120px;
+        }
+
+        .status-card {
+            margin-bottom: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+            backdrop-filter: blur(10px);
+            background: var(--card-bg);
+        }
+
+        .status-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .control-section {
+            margin-bottom: 24px;
+            animation: fadeInUp 0.5s ease-out;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-section > mdui-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-section > mdui-card > div[style*="padding: 16px"] {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-container {
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .mdui-theme-dark .log-container {
+            background-color: #2d2d2d;
+            border-color: #444;
+        }
+
+        .sync-status {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-weight: 500;
+            transition: all var(--transition-speed);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sync-running {
+            background-color: rgba(52, 168, 83, 0.15);
+            color: #2e7d32;
+            border: 1px solid rgba(52, 168, 83, 0.3);
+        }
+
+        .mdui-theme-dark .sync-running {
+            background-color: rgba(52, 168, 83, 0.2);
+            color: #81c784;
+            border: 1px solid rgba(52, 168, 83, 0.5);
+        }
+
+        .sync-stopped {
+            background-color: rgba(234, 67, 53, 0.15);
+            color: #c62828;
+            border: 1px solid rgba(234, 67, 53, 0.3);
+        }
+
+        .mdui-theme-dark .sync-stopped {
+            background-color: rgba(234, 67, 53, 0.2);
+            color: #e57373;
+            border: 1px solid rgba(234, 67, 53, 0.5);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .mdui-card {
+            margin-bottom: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+            backdrop-filter: blur(10px);
+            background: var(--card-bg);
+            width: 100%;
+        }
+
+        .mdui-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .config-input {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+        }
+
+        .action-button {
+            margin: 4px;
+            border-radius: 8px;
+            transition: all var(--transition-speed);
+        }
+
+        .action-button:hover {
+            transform: scale(1.03);
+        }
+
+        .page-header {
+            margin: 24px 0 16px;
+            font-weight: 500;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .page-header svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .section-header {
+            margin: 16px 0 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-header svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background-color: #4caf50;
+        }
+
+        .status-offline {
+            background-color: #f44336;
+        }
+
+        .status-warning {
+            background-color: #ff9800;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .mdui-list-item {
+            border-radius: 8px;
+            margin: 4px 8px;
+            transition: all var(--transition-speed);
+        }
+
+        .mdui-list-item:hover {
+            background-color: rgba(66, 133, 244, 0.1);
+        }
+
+        .mdui-list-item.selected {
+            background-color: rgba(66, 133, 244, 0.2);
+        }
+
+        .chip-group mdui-chip {
+            margin: 4px;
+        }
+
+        .footer-bar {
+            text-align: center;
+            padding: 16px;
+            margin-top: 24px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* 响应式网格布局优化 */
+        .mdui-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .mdui-grid-item {
+            flex: 1 1 calc(50% - 8px);
+            min-width: 200px;
+        }
+
+        /* 确保所有控制卡片高度一致 */
+        .control-section {
+            margin-bottom: 24px;
+            animation: fadeInUp 0.5s ease-out;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-section > mdui-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 180px; /* 设置最小高度确保一致性 */
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            .page-container {
+                padding: 8px;
+            }
+
+            .mdui-grid {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .mdui-grid-item {
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+                width: 100% !important;
+            }
+
+            .mdui-card {
+                width: 100% !important;
+                margin-bottom: 12px;
+            }
+
+            .control-section {
+                margin-bottom: 16px;
+            }
+
+            .action-button {
+                width: 100%;
+                margin: 4px 0;
+            }
+
+            /* 移动端卡片内容优化 */
+            .mdui-button {
+                min-height: 48px;
+                font-size: 16px;
+            }
+            
+            .control-section > mdui-card {
+                min-height: auto;
+            }
+        }
+
+        /* 超小屏幕优化 */
+        @media (max-width: 480px) {
+            .page-container {
+                padding: 4px;
+            }
+
+            .mdui-grid-item {
+                min-width: 100% !important;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .mdui-card {
+                min-height: 100%;
+            }
+
+            .mdui-grid-item {
+                flex: 1;
+            }
+            
+            /* 确保主页面的卡片等高 */
+            #main-page .control-section > mdui-card {
+                min-height: 220px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <mdui-app class="mdui-theme-auto">
+        <!-- 顶部应用栏 -->
+        <mdui-top-app-bar variant="center-aligned">
+            <mdui-button-icon icon="menu" onclick="toggleDrawer()">
+                <div slot="icon" innerHTML="${getSvgIcon('menu')}"></div>
+            </mdui-button-icon>
+            <mdui-top-app-bar-title>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div innerHTML="${getSvgIcon('dashboard')}" style="width: 24px; height: 24px;"></div>
+                    SillyTavern 控制面板
+                </div>
+            </mdui-top-app-bar-title>
+            <div style="flex-grow: 1"></div>
+            <mdui-button-icon icon="refresh" onclick="refreshAllStatus()">
+                <div slot="icon" innerHTML="${getSvgIcon('refresh')}"></div>
+            </mdui-button-icon>
+            <mdui-button-icon icon="settings" onclick="showSettings()">
+                <div slot="icon" innerHTML="${getSvgIcon('settings')}"></div>
+            </mdui-button-icon>
+        </mdui-top-app-bar>
+
+        <!-- 侧边导航抽屉 -->
+        <mdui-navigation-drawer id="drawer" class="mdui-drawer-close">
+            <mdui-list>
+                <mdui-list-item onclick="showPage('main')">
+                    <div slot="icon" innerHTML="${getSvgIcon('dashboard')}"></div>
+                    主控制面板
+                </mdui-list-item>
+                <mdui-list-item onclick="showPage('config')">
+                    <div slot="icon" innerHTML="${getSvgIcon('settings')}"></div>
+                    配置管理
+                </mdui-list-item>
+                <mdui-list-item onclick="showPage('sync')">
+                    <div slot="icon" innerHTML="${getSvgIcon('sync')}"></div>
+                    数据同步
+                </mdui-list-item>
+                <mdui-list-item onclick="showPage('status')">
+                    <div slot="icon" innerHTML="${getSvgIcon('info')}"></div>
+                    系统状态
+                </mdui-list-item>
+                <mdui-divider></mdui-divider>
+                <mdui-list-item onclick="showAbout()">
+                    <div slot="icon" innerHTML="${getSvgIcon('help')}"></div>
+                    关于
+                </mdui-list-item>
+            </mdui-list>
+        </mdui-navigation-drawer>
+
+        <!-- 主内容区域 -->
+        <mdui-layout-main class="mdui-container-fluid">
+            <div class="page-container">
+
+                <!-- 主控制面板页面 -->
+                <div id="main-page" class="page-content">
+                    <!-- SillyTavern 控制卡片 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+                            <h3 class="mdui-typography-headline-6">SillyTavern 控制</h3>
+
+                            <mdui-grid style="flex: 1;">
+                                <mdui-grid-item xs="12" sm="6" md="3">
+                                    <mdui-button
+                                        variant="filled"
+                                        onclick="installSillyTavern()"
+                                        style="width: 100%; margin: 4px;">
+                                        <mdui-icon name="download"></mdui-icon>
+                                        安装 SillyTavern
+                                    </mdui-button>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="3">
+                                    <mdui-button
+                                        variant="filled"
+                                        style="background-color: #4CAF50; width: 100%; margin: 4px;"
+                                        onclick="startSillyTavern()">
+                                        <mdui-icon name="play_arrow"></mdui-icon>
+                                        启动 SillyTavern
+                                    </mdui-button>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="3">
+                                    <mdui-button
+                                        variant="outlined"
+                                        onclick="updateSillyTavern()"
+                                        style="width: 100%; margin: 4px;">
+                                        <mdui-icon name="system_update"></mdui-icon>
+                                        更新 SillyTavern
+                                    </mdui-button>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="3">
+                                    <mdui-button
+                                        variant="outlined"
+                                        onclick="openSillyTavern()"
+                                        style="width: 100%; margin: 4px;"
+                                        id="open-st-btn">
+                                        <mdui-icon name="open_in_browser"></mdui-icon>
+                                        打开 SillyTavern
+                                    </mdui-button>
+                                </mdui-grid-item>
+                            </mdui-grid>
+
+                            <!-- 一键启动设置 -->
+                            <div style="margin-top: 16px;">
+                                <mdui-checkbox name="autostart" id="autostart-checkbox">
+                                    启用一键启动模式
+                                </mdui-checkbox>
+                            </div>
+                        </div>
+                    </mdui-card>
+
+                    <!-- 启动器控制卡片 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+                            <h3 class="mdui-typography-headline-6">启动器控制</h3>
+
+                            <mdui-grid style="flex: 1;">
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-button
+                                        variant="outlined"
+                                        onclick="updateLauncher()"
+                                        style="width: 100%; margin: 4px;">
+                                        <mdui-icon name="system_update_alt"></mdui-icon>
+                                        更新启动器
+                                    </mdui-button>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-button
+                                        variant="outlined"
+                                        style="color: #ff9800; width: 100%; margin: 4px;"
+                                        onclick="restartLauncher()">
+                                        <mdui-icon name="restart_alt"></mdui-icon>
+                                        重启启动器
+                                    </mdui-button>
+                                </mdui-grid-item>
+                            </mdui-grid>
+                        </div>
+                    </mdui-card>
+
+                    <!-- 操作日志卡片 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 class="mdui-typography-headline-6">操作日志</h3>
+                                <mdui-button variant="text" onclick="clearLog()">
+                                    <mdui-icon name="clear_all"></mdui-icon>
+                                    清空日志
+                                </mdui-button>
+                            </div>
+
+                            <mdui-text-field
+                                id="log-output"
+                                rows="12"
+                                readonly
+                                class="log-container"
+                                placeholder="等待操作..."
+                                style="flex: 1;"></mdui-text-field>
+                        </div>
+                    </mdui-card>
+                </div>
+
+                <!-- 配置管理页面 -->
+                <div id="config-page" class="page-content hidden">
+                    <!-- GitHub 镜像配置 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px;">
+                            <h3 class="mdui-typography-headline-6">GitHub 镜像配置</h3>
+
+                            <div style="margin: 16px 0;">
+                                <mdui-text-field
+                                    id="mirror-input"
+                                    label="镜像源"
+                                    helper="例如: github, gh-proxy.org, ghfile.geekertao.top"
+                                    class="config-input"></mdui-text-field>
+                            </div>
+
+                            <div style="margin: 16px 0;">
+                                <mdui-chip-group>
+                                    <mdui-chip onclick="setMirror('github')" selectable>官方</mdui-chip>
+                                    <mdui-chip onclick="setMirror('gh-proxy.org')" selectable>Proxy</mdui-chip>
+                                    <mdui-chip onclick="setMirror('ghfile.geekertao.top')" selectable>Gee</mdui-chip>
+                                </mdui-chip-group>
+                            </div>
+
+                            <mdui-button variant="filled" onclick="saveMirror()">
+                                <mdui-icon name="save"></mdui-icon>
+                                应用镜像设置
+                            </mdui-button>
+                        </div>
+                    </mdui-card>
+
+                    <!-- SillyTavern 配置 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px;">
+                            <h3 class="mdui-typography-headline-6">SillyTavern 配置</h3>
+
+                            <mdui-grid>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-text-field
+                                        id="st-port-input"
+                                        label="端口号"
+                                        type="number"
+                                        value="8000"
+                                        class="config-input"></mdui-text-field>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <div style="margin-top: 16px;">
+                                        <mdui-checkbox name="listen-all" id="listen-all-checkbox">
+                                            监听所有地址 (0.0.0.0)
+                                        </mdui-checkbox>
+                                    </div>
+                                </mdui-grid-item>
+                            </mdui-grid>
+
+                            <div style="margin-top: 16px;">
+                                <mdui-button variant="filled" onclick="saveSTConfig()">
+                                    <mdui-icon name="save"></mdui-icon>
+                                    保存 SillyTavern 配置
+                                </mdui-button>
+                            </div>
+                        </div>
+                    </mdui-card>
+                </div>
+
+                <!-- 数据同步页面 -->
+                <div id="sync-page" class="page-content hidden">
+                    <!-- 同步服务器控制 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px;">
+                            <h3 class="mdui-typography-headline-6">同步服务器控制</h3>
+
+                            <mdui-grid>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-text-field
+                                        id="sync-port-input"
+                                        label="端口"
+                                        type="number"
+                                        value="9999"
+                                        class="config-input"></mdui-text-field>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-text-field
+                                        id="sync-host-input"
+                                        label="主机地址"
+                                        value="0.0.0.0"
+                                        class="config-input"></mdui-text-field>
+                                </mdui-grid-item>
+                            </mdui-grid>
+
+                            <div style="margin: 16px 0;">
+                                <div id="sync-server-status" class="sync-status sync-stopped">
+                                    状态: 未知
+                                </div>
+                            </div>
+
+                            <mdui-grid>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-button
+                                        variant="filled"
+                                        style="background-color: #4CAF50; width: 100%;"
+                                        onclick="startSyncServer()">
+                                        <mdui-icon name="play_arrow"></mdui-icon>
+                                        启动同步服务器
+                                    </mdui-button>
+                                </mdui-grid-item>
+                                <mdui-grid-item xs="12" sm="6" md="6">
+                                    <mdui-button
+                                        variant="filled"
+                                        style="background-color: #f44336; width: 100%;"
+                                        onclick="stopSyncServer()">
+                                        <mdui-icon name="stop"></mdui-icon>
+                                        停止同步服务器
+                                    </mdui-button>
+                                </mdui-grid-item>
+                            </mdui-grid>
+                        </div>
+                    </mdui-card>
+
+                    <!-- 客户端同步 -->
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px;">
+                            <h3 class="mdui-typography-headline-6">从服务器同步数据</h3>
+
+                            <div style="margin: 16px 0;">
+                                <mdui-text-field
+                                    id="server-url-input"
+                                    label="服务器地址"
+                                    value="http://192.168.1.100:9999"
+                                    helper="例如: http://192.168.1.100:9999"
+                                    class="config-input"></mdui-text-field>
+                            </div>
+
+                            <div style="margin: 16px 0;">
+                                <label style="font-size: 14px; color: #666;">同步方法:</label>
+                                <mdui-chip-group id="sync-method-group">
+                                    <mdui-chip value="auto" selectable selected>自动</mdui-chip>
+                                    <mdui-chip value="zip" selectable>ZIP</mdui-chip>
+                                    <mdui-chip value="incremental" selectable>增量</mdui-chip>
+                                </mdui-chip-group>
+                            </div>
+
+                            <div style="margin: 16px 0;">
+                                <mdui-checkbox name="backup-data" id="backup-checkbox" checked>
+                                    备份现有数据
+                                </mdui-checkbox>
+                            </div>
+
+                            <mdui-button
+                                variant="filled"
+                                style="background-color: #2196F3; width: 100%;"
+                                onclick="syncFromServer()">
+                                <mdui-icon name="download"></mdui-icon>
+                                开始同步
+                            </mdui-button>
+                        </div>
+                    </mdui-card>
+                </div>
+
+                <!-- 系统状态页面 -->
+                <div id="status-page" class="page-content hidden">
+                    <mdui-card class="control-section">
+                        <div style="padding: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                                <h3 class="mdui-typography-headline-6" style="margin: 0;">系统状态</h3>
+                                <mdui-button variant="outlined" onclick="updateSystemStatus()" style="white-space: nowrap;">
+                                    <mdui-icon name="refresh"></mdui-icon>
+                                    刷新状态
+                                </mdui-button>
+                            </div>
+
+                            <mdui-text-field
+                                id="status-output"
+                                rows="20"
+                                readonly
+                                class="log-container"
+                                placeholder="正在加载状态信息..."></mdui-text-field>
+                        </div>
+                    </mdui-card>
+                </div>
+            </div>
+        </mdui-layout-main>
+
+        <!-- 底部状态栏 -->
+        <mdui-bottom-app-bar>
+            <div style="padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div>
+                    <span id="status-text">就绪</span>
+                </div>
+                <div>
+                    <span id="ip-text" style="margin-right: 16px;">本地IP: 获取中...</span>
+                    <span id="time-text">--:--:--</span>
+                </div>
+            </div>
+        </mdui-bottom-app-bar>
+    </mdui-app>
+
+    <!-- MDUI2 JavaScript -->
+    <script src="static/mdui.global.js"></script>
+
+    <!-- Socket.IO Client -->
+    <script src="static/socket.io.js"></script>
+
+    <!-- Icons JavaScript -->
+    <script src="static/icons.js?v=1.0"></script>
+
+    <!-- API JavaScript -->
+    <script src="static/api.js?v=1.0"></script>
+
+    <!-- 主应用逻辑 -->
+    <script>
+        // 全局状态管理
+        const AppState = {
+            currentPage: 'main',
+            autoRefresh: null,
+            apiBaseUrl: '/api'
+        };
+
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', function() {
+            // 调试：检查API是否正确加载
+            console.log('API object:', window.API);
+            if (window.API) {
+                console.log('API functions available:', {
+                    getConfig: typeof window.API.getConfig,
+                    connectWebSocket: typeof window.API.connectWebSocket
+                });
+            }
+
+            // 检查API是否正确加载
+            if (typeof window.API === 'undefined') {
+                console.error('API对象未定义');
+                // 等待一段时间再试
+                setTimeout(() => {
+                    if (typeof window.API !== 'undefined') {
+                        initializeApp();
+                        replaceMDUIIcons();
+                        updateSystemStatus();
+                        updateTime();
+                        setInterval(updateTime, 1000);
+                    } else {
+                        // 如果重试后仍然失败，显示错误信息
+                        console.error('API加载失败');
+                        showAlertDialog('错误', '应用程序接口加载失败，请刷新页面重试。', '确定');
+                    }
+                }, 1000);
+                return;
+            }
+
+            // 检查必要的API方法
+            const requiredMethods = ['getConfig', 'connectWebSocket'];
+            let methodsAvailable = true;
+            for (const method of requiredMethods) {
+                if (typeof window.API[method] !== 'function') {
+                    methodsAvailable = false;
+                    break;
+                }
+            }
+
+            if (!methodsAvailable) {
+                console.error('API方法未正确定义');
+                // 等待一段时间再试
+                setTimeout(() => {
+                    let methodsNowAvailable = true;
+                    for (const method of requiredMethods) {
+                        if (typeof window.API[method] !== 'function') {
+                            methodsNowAvailable = false;
+                            break;
+                        }
+                    }
+                    
+                    if (methodsNowAvailable) {
+                        initializeApp();
+                        replaceMDUIIcons();
+                        updateSystemStatus();
+                        updateTime();
+                        setInterval(updateTime, 1000);
+                    } else {
+                        // 如果重试后仍然失败，显示错误信息
+                        console.error('API方法加载失败');
+                        showAlertDialog('错误', '应用程序接口方法加载失败，请刷新页面重试。', '确定');
+                    }
+                }, 1000);
+                return;
+            }
+
+            initializeApp();
+            replaceMDUIIcons();
+            updateSystemStatus();
+            updateTime();
+            setInterval(updateTime, 1000);
+        });
+
+        // 替换MDUI图标为SVG
+        function replaceMDUIIcons() {
+            // 替换所有 mdui-button-icon 中的 icon 属性
+            document.querySelectorAll('mdui-button-icon').forEach(element => {
+                const iconName = element.getAttribute('icon');
+                if (iconName && getSvgIcon) {
+                    const svgCode = getSvgIcon(iconName);
+                    if (svgCode) {
+                        element.innerHTML = svgCode;
+                        // 移除 icon 属性以避免重复渲染
+                        element.removeAttribute('icon');
+                    }
+                }
+            });
+
+            // 替换所有 mdui-list-item 中的 icon 属性
+            document.querySelectorAll('mdui-list-item').forEach(element => {
+                const iconName = element.getAttribute('icon');
+                if (iconName && getSvgIcon) {
+                    const svgCode = getSvgIcon(iconName);
+                    if (svgCode) {
+                        element.setAttribute('icon', '');
+                        // 在列表项内容前插入SVG
+                        if (element.firstChild) {
+                            element.insertBefore(createIconSpan(svgCode), element.firstChild);
+                        } else {
+                            element.appendChild(createIconSpan(svgCode));
+                        }
+                    }
+                }
+            });
+
+            // 替换所有 mdui-icon 元素
+            document.querySelectorAll('mdui-icon').forEach(element => {
+                const iconName = element.getAttribute('name');
+                if (iconName && getSvgIcon) {
+                    const svgCode = getSvgIcon(iconName);
+                    if (svgCode) {
+                        element.innerHTML = svgCode;
+                        // 移除 name 属性以避免重复渲染
+                        element.removeAttribute('name');
+                    }
+                }
+            });
+        }
+
+        // 创建带样式的图标span
+        function createIconSpan(svgCode) {
+            const span = document.createElement('span');
+            span.style.display = 'inline-flex';
+            span.style.alignItems = 'center';
+            span.style.marginRight = '16px';
+            span.innerHTML = svgCode;
+
+            // 为SVG添加样式
+            const svg = span.querySelector('svg');
+            if (svg) {
+                svg.style.width = '24px';
+                svg.style.height = '24px';
+                svg.style.fill = 'currentColor';
+            }
+
+            return span;
+        }
+
+        function initializeApp() {
+            // 检查API对象及其必需方法
+            if (typeof window.API === 'undefined') {
+                console.error('API对象未定义');
+                showAlertDialog('错误', '应用程序接口未正确加载，请刷新页面重试。', '确定');
+                return;
+            }
+            
+            // 检查必要的API方法
+            const requiredMethods = ['getConfig', 'connectWebSocket'];
+            for (const method of requiredMethods) {
+                if (typeof window.API[method] !== 'function') {
+                    // 尝试使用备用API对象
+                    if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI[method] === 'function') {
+                        window.API = window.SillyTavernAPI;
+                    } else {
+                        console.error(`API对象缺少${method}方法`);
+                        showAlertDialog('错误', `应用程序接口方法${method}未正确加载，请刷新页面重试。`, '确定');
+                        return;
+                    }
+                }
+            }
+
+            // 初始化WebSocket连接
+            initializeWebSocket();
+
+            // 获取初始配置
+            loadInitialConfig();
+
+            // 设置自动刷新（每30秒）
+            AppState.autoRefresh = setInterval(() => {
+                if (AppState.currentPage === 'status') {
+                    updateSystemStatus();
+                }
+                updateSyncServerStatus();
+            }, 30000);
+
+            // 绑定事件监听器
+            document.getElementById('autostart-checkbox').addEventListener('change', function() {
+                toggleAutostart(this.checked);
+            });
+        }
+
+        // WebSocket连接初始化
+        function initializeWebSocket() {
+            try {
+                // 确保API对象及其方法存在
+                if (typeof window.API === 'undefined') {
+                    console.error('API对象未定义');
+                    return;
+                }
+                
+                // 检查connectWebSocket方法是否存在，如果不存在则尝试使用备用API
+                if (typeof window.API.connectWebSocket !== 'function') {
+                    // 尝试使用备用API对象
+                    if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.connectWebSocket === 'function') {
+                        window.API = window.SillyTavernAPI;
+                    } else {
+                        console.error('API对象缺少connectWebSocket方法');
+                        return;
+                    }
+                }
+                
+                const socket = window.API.connectWebSocket(
+                    // onMessage
+                    (data) => {
+                        if (data.type === 'log') {
+                            addLog(`[${data.timestamp}] ${data.message}`);
+                        } else if (data.type === 'connect') {
+                            console.log('WebSocket连接成功:', data.data);
+                        } else if (data.type === 'heartbeat') {
+                            console.log('心跳响应:', data.data);
+                        }
+                    },
+                    // onError
+                    (error) => {
+                        console.error('WebSocket连接错误:', error);
+                    },
+                    // onClose
+                    (event) => {
+                        console.log('WebSocket连接关闭:', event);
+                        // 5秒后尝试重新连接
+                        setTimeout(initializeWebSocket, 5000);
+                    }
+                );
+
+                // 存储socket引用供断开连接时使用
+                window.websocketSocket = socket;
+            } catch (error) {
+                console.error('初始化WebSocket连接失败:', error);
+            }
+        }
+
+        // 页面切换功能
+        function showPage(pageName) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.add('hidden');
+            });
+
+            // 显示目标页面
+            const targetPage = document.getElementById(`${pageName}-page`);
+            if (targetPage) {
+                targetPage.classList.remove('hidden');
+                AppState.currentPage = pageName;
+            }
+
+            // 关闭抽屉（如果在移动设备上）
+            const drawer = document.getElementById('drawer');
+            if (drawer && drawer.classList.contains('mdui-drawer-open')) {
+                drawer.classList.remove('mdui-drawer-open');
+                drawer.classList.add('mdui-drawer-close');
+            }
+
+            // 特定页面初始化
+            if (pageName === 'status') {
+                updateSystemStatus();
+            } else if (pageName === 'sync') {
+                updateSyncServerStatus();
+            }
+        }
+
+        // 抽屉切换
+        function toggleDrawer() {
+            const drawer = document.getElementById('drawer');
+            if (drawer.classList.contains('mdui-drawer-close')) {
+                drawer.classList.remove('mdui-drawer-close');
+                drawer.classList.add('mdui-drawer-open');
+            } else {
+                drawer.classList.remove('mdui-drawer-open');
+                drawer.classList.add('mdui-drawer-close');
+            }
+        }
+
+        // 刷新所有状态
+        function refreshAllStatus() {
+            updateSystemStatus();
+            updateSyncServerStatus();
+            updateTime();
+            showSnackbar('状态已刷新', 'success');
+        }
+
+        // 更新时间显示
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const timeElement = document.getElementById('time-text');
+            if (timeElement) {
+                timeElement.textContent = timeString;
+            }
+        }
+
+        // 显示设置对话框
+        function showSettings() {
+            showAlertDialog('设置', '设置功能正在开发中...', '确定');
+        }
+
+        // 显示关于对话框
+        function showAbout() {
+            const aboutContent = `
+                <h3>SillyTavern WebUI 控制面板</h3>
+                <p>版本: 2.0 (MDUI2)</p>
+                <p>一个现代化的 SillyTavern 管理界面</p>
+                <p>特性:</p>
+                <ul>
+                    <li>响应式设计，支持移动设备</li>
+                    <li>现代化的 Material Design 界面</li>
+                    <li>实时状态监控</li>
+                    <li>数据同步功能</li>
+                </ul>
+            `;
+            showAlertDialog('关于', aboutContent, '确定');
+        }
+
+        // 工具函数
+        function showSnackbar(message, type = 'info') {
+            const snackbar = document.createElement('mdui-snackbar');
+            snackbar.innerHTML = message;
+            document.body.appendChild(snackbar);
+            snackbar.open = true;
+
+            setTimeout(() => {
+                document.body.removeChild(snackbar);
+            }, 3000);
+        }
+
+        function showAlertDialog(title, message, confirmText = '确定') {
+            // 保存页面当前滚动位置
+            const scrollX = window.scrollX || window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollY = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+            
+            // 保存原始的样式属性
+            const originalStyles = {
+                position: document.body.style.position,
+                top: document.body.style.top,
+                left: document.body.style.left,
+                overflow: document.body.style.overflow,
+                paddingRight: document.body.style.paddingRight
+            };
+
+            // 计算滚动条宽度以防止布局跳动
+            const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            
+            // 防止背景滚动 - 使用固定定位方案
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.left = `-${scrollX}px`;
+            document.body.style.overflow = 'hidden';
+            
+            // 补偿滚动条宽度，防止页面跳动
+            if (scrollbarWidth > 0) {
+                document.body.style.paddingRight = `${scrollbarWidth}px`;
+            }
+
+            const dialog = document.createElement('mdui-dialog');
+            dialog.className = 'custom-dialog';
+            
+            // 将原始状态和滚动位置保存到对话框元素上
+            dialog.savedState = {
+                scrollX: scrollX,
+                scrollY: scrollY,
+                styles: originalStyles
+            };
+            
+            dialog.innerHTML = `
+                <mdui-top-app-bar slot="header">
+                    <mdui-top-app-bar-title>${title}</mdui-top-app-bar-title>
+                    <mdui-button-icon onclick="closeAlertDialog(this)">
+                        <div slot="icon" innerHTML="${getSvgIcon('close')}"></div>
+                    </mdui-button-icon>
+                </mdui-top-app-bar>
+                <div style="padding: 16px; max-height: 70vh; overflow-y: auto;">
+                    ${message}
+                </div>
+                <mdui-button slot="action" variant="text" onclick="closeAlertDialog(this)">${confirmText}</mdui-button>
+            `;
+
+            document.body.appendChild(dialog);
+
+            // 使用 setTimeout 确保对话框渲染完成后再打开
+            setTimeout(() => {
+                dialog.open = true;
+            }, 10);
+
+            dialog.addEventListener('closed', () => {
+                closeDialogCleanup(dialog);
+            });
+
+            // ESC 键关闭对话框
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    closeDialogCleanup(dialog);
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        }
+
+        function closeAlertDialog(element) {
+            const dialog = element.closest('mdui-dialog');
+            if (dialog) {
+                closeDialogCleanup(dialog);
+            }
+        }
+
+        function closeDialogCleanup(dialog) {
+            if (dialog && dialog.parentNode) {
+                // 获取保存的状态
+                const savedState = dialog.savedState || {
+                    scrollX: 0,
+                    scrollY: 0,
+                    styles: {}
+                };
+                
+                // 按规范先恢复滚动位置，再恢复样式属性
+                window.scrollTo(savedState.scrollX, savedState.scrollY);
+                
+                // 恢复原始样式
+                const styles = savedState.styles;
+                document.body.style.position = styles.position || '';
+                document.body.style.top = styles.top || '';
+                document.body.style.left = styles.left || '';
+                document.body.style.overflow = styles.overflow || '';
+                document.body.style.paddingRight = styles.paddingRight || '';
+
+                // 延迟移除对话框以避免布局跳动
+                setTimeout(() => {
+                    if (dialog.parentNode) {
+                        document.body.removeChild(dialog);
+                    }
+                }, 100);
+            }
+        }
+
+        // 日志功能
+        function addLog(message, type = 'info') {
+            const logOutput = document.getElementById('log-output');
+            const timestamp = new Date().toLocaleTimeString('zh-CN', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            const logLine = `[${timestamp}] ${message}\n`;
+            logOutput.value += logLine;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function clearLog() {
+            const logOutput = document.getElementById('log-output');
+            logOutput.value = '';
+            showSnackbar('日志已清空', 'success');
+        }
+
+        // SillyTavern 控制功能
+        async function installSillyTavern() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.installSillyTavern !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.installSillyTavern === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            addLog('开始安装 SillyTavern...');
+            try {
+                const result = await window.API.installSillyTavern();
+                if (result.success) {
+                    addLog('SillyTavern 安装完成');
+                    showSnackbar('安装成功', 'success');
+                } else {
+                    addLog(`安装失败: ${result.message}`);
+                    showSnackbar(`安装失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`安装过程中出错: ${error.message}`);
+                showSnackbar(`安装出错: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateSillyTavern() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.updateSillyTavern !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.updateSillyTavern === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            addLog('开始更新 SillyTavern...');
+            try {
+                const result = await window.API.updateSillyTavern();
+                if (result.success) {
+                    addLog('SillyTavern 更新完成');
+                    showSnackbar('更新成功', 'success');
+                } else {
+                    addLog(`更新失败: ${result.message}`);
+                    showSnackbar(`更新失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`更新过程中出错: ${error.message}`);
+                showSnackbar(`更新出错: ${error.message}`, 'error');
+            }
+        }
+
+        function openSillyTavern() {
+            // 在新窗口打开 SillyTavern
+            window.open('http://127.0.0.1:8000', '_blank');
+            addLog('已打开 SillyTavern 网页');
+        }
+
+        // 启动器控制功能
+        async function updateLauncher() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.updateLauncher !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.updateLauncher === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            addLog('开始更新启动器...');
+            try {
+                const result = await window.API.updateLauncher();
+                if (result.success) {
+                    addLog('启动器更新完成');
+                    showSnackbar('更新成功', 'success');
+                } else {
+                    addLog(`更新失败: ${result.message}`);
+                    showSnackbar(`更新失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`更新过程中出错: ${error.message}`);
+                showSnackbar(`更新出错: ${error.message}`, 'error');
+            }
+        }
+
+        function restartLauncher() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.restartLauncher !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.restartLauncher === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+
+            const message = `
+                <p>重启启动器将会重新启动整个Web界面，确定要继续吗？</p>
+                <mdui-button variant="filled" style="background-color: #ff9800; margin-top: 16px; width: 100%;" onclick="confirmRestartLauncher()">
+                    <mdui-icon name="restart_alt"></mdui-icon>
+                    确定重启
+                </mdui-button>
+            `;
+            showAlertDialog('重启启动器确认', message, '取消');
+        }
+
+        async function confirmRestartLauncher() {
+            addLog('正在重启启动器...');
+            try {
+                const result = await window.API.restartLauncher();
+                if (result.success) {
+                    addLog('启动器重启指令已发送');
+                    showSnackbar('正在重启...', 'info');
+                    // 延迟刷新页面
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                }
+            } catch (error) {
+                addLog(`重启过程中出错: ${error.message}`);
+                showSnackbar(`重启出错: ${error.message}`, 'error');
+            }
+
+            // 关闭对话框
+            const dialog = document.querySelector('mdui-dialog.custom-dialog');
+            if (dialog) {
+                closeDialogCleanup(dialog);
+            }
+        }
+
+        // 配置管理功能
+        function setMirror(mirror) {
+            document.getElementById('mirror-input').value = mirror;
+        }
+
+        async function saveMirror() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.setMirror !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.setMirror === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            const mirror = document.getElementById('mirror-input').value.trim();
+            if (!mirror) {
+                showSnackbar('请输入镜像源', 'warning');
+                return;
+            }
+
+            try {
+                const result = await window.API.setMirror(mirror);
+                if (result.success) {
+                    addLog(`GitHub 镜像已设置为: ${mirror}`);
+                    showSnackbar('镜像设置已保存', 'success');
+                } else {
+                    addLog(`保存镜像失败: ${result.message}`);
+                    showSnackbar(`保存失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`保存镜像时出错: ${error.message}`);
+                showSnackbar(`保存出错: ${error.message}`, 'error');
+            }
+        }
+
+        async function saveSTConfig() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.saveSTConfig !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.saveSTConfig === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            const port = parseInt(document.getElementById('st-port-input').value);
+            const listenAll = document.getElementById('listen-all-checkbox').checked;
+
+            if (isNaN(port) || port < 1 || port > 65535) {
+                showSnackbar('请输入有效的端口号 (1-65535)', 'warning');
+                return;
+            }
+
+            try {
+                const result = await window.API.saveSTConfig(port, listenAll);
+                if (result.success) {
+                    addLog(`SillyTavern 配置已保存: 端口=${port}, 监听所有地址=${listenAll}`);
+                    showSnackbar('配置已保存', 'success');
+                } else {
+                    addLog(`保存配置失败: ${result.message}`);
+                    showSnackbar(`保存失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`保存配置时出错: ${error.message}`);
+                showSnackbar(`保存出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 同步服务器功能
+        async function startSyncServer() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.startSyncServer !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.startSyncServer === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            const port = parseInt(document.getElementById('sync-port-input').value);
+            const host = document.getElementById('sync-host-input').value;
+
+            if (isNaN(port) || port < 1 || port > 65535) {
+                showSnackbar('请输入有效的端口号 (1-65535)', 'warning');
+                return;
+            }
+
+            addLog(`正在启动同步服务器 (端口: ${port}, 主机: ${host})...`);
+
+            try {
+                const result = await window.API.startSyncServer(port, host);
+                if (result.success) {
+                    addLog('同步服务器启动成功');
+                    showSnackbar('同步服务器启动成功', 'success');
+                    updateSyncServerStatus();
+                } else {
+                    addLog(`同步服务器启动失败: ${result.message}`);
+                    showSnackbar(`启动失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`启动同步服务器时出错: ${error.message}`);
+                showSnackbar(`启动出错: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopSyncServer() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.stopSyncServer !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.stopSyncServer === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            addLog('正在停止同步服务器...');
+
+            try {
+                const result = await window.API.stopSyncServer();
+                if (result.success) {
+                    addLog('同步服务器已停止');
+                    showSnackbar('同步服务器已停止', 'success');
+                    updateSyncServerStatus();
+                } else {
+                    addLog(`停止同步服务器失败: ${result.message}`);
+                    showSnackbar(`停止失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`停止同步服务器时出错: ${error.message}`);
+                showSnackbar(`停止出错: ${error.message}`, 'error');
+            }
+        }
+
+        async function syncFromServer() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.syncFromServer !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.syncFromServer === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            const serverUrl = document.getElementById('server-url-input').value.trim();
+            if (!serverUrl) {
+                showSnackbar('请输入服务器地址', 'warning');
+                return;
+            }
+
+            // 获取选中的同步方法
+            const selectedMethod = document.querySelector('#sync-method-group mdui-chip[selected]');
+            const method = selectedMethod ? selectedMethod.value : 'auto';
+            const backup = document.getElementById('backup-checkbox').checked;
+
+            addLog(`开始从服务器同步数据: ${serverUrl} (方法: ${method}, 备份: ${backup})`);
+
+            try {
+                const result = await window.API.syncFromServer(serverUrl, method, backup);
+                if (result.success) {
+                    addLog('数据同步完成');
+                    showSnackbar('数据同步完成', 'success');
+                } else {
+                    addLog(`数据同步失败: ${result.message}`);
+                    showSnackbar(`同步失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`同步过程中出错: ${error.message}`);
+                showSnackbar(`同步出错: ${error.message}`, 'error');
+            }
+        }
+
+        // 状态监控功能
+        async function updateSystemStatus() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.getSystemStatus !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.getSystemStatus === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const status = await window.API.getSystemStatus();
+                const statusOutput = document.getElementById('status-output');
+
+                if (status) {
+                    statusOutput.value = formatSystemStatus(status);
+                } else {
+                    statusOutput.value = '无法获取状态信息';
+                }
+            } catch (error) {
+                const statusOutput = document.getElementById('status-output');
+                statusOutput.value = `获取状态信息时出错: ${error.message}`;
+            }
+        }
+
+        function formatSystemStatus(status) {
+            let statusText = '=== 系统状态 ===\n\n';
+
+            // SillyTavern 状态
+            statusText += 'SillyTavern 状态:\n';
+            statusText += `  已安装: ${status.sillytavern?.installed ? '是' : '否'}\n`;
+            if (status.sillytavern?.port) {
+                statusText += `  配置端口: ${status.sillytavern.port}\n`;
+            }
+            if (status.sillytavern?.listen !== undefined) {
+                statusText += `  监听所有地址: ${status.sillytavern.listen}\n`;
+            }
+            statusText += '\n';
+
+            // 同步服务器状态
+            statusText += '同步服务器状态:\n';
+            statusText += `  运行状态: ${status.sync_server?.running ? '运行中' : '已停止'}\n`;
+            statusText += `  配置状态: ${status.sync_server?.config_enabled ? '启用' : '禁用'}\n`;
+            statusText += `  状态一致性: ${status.sync_server?.consistent ? '一致' : '不一致'}\n`;
+            statusText += `  监听端口: ${status.sync_server?.port || 'N/A'}\n`;
+            statusText += `  监听主机: ${status.sync_server?.host || 'N/A'}\n`;
+            if (status.sync_server?.running && status.local_ip) {
+                statusText += `  访问地址: http://${status.local_ip}:${status.sync_server.port}\n`;
+            }
+            statusText += '\n';
+
+            // GitHub 镜像配置
+            statusText += 'GitHub 镜像配置:\n';
+            statusText += `  当前镜像: ${status.github_mirror || 'github'}\n`;
+            statusText += '\n';
+
+            // 自动启动配置
+            statusText += '启动配置:\n';
+            statusText += `  一键启动: ${status.autostart ? '启用' : '禁用'}\n`;
+            statusText += '\n';
+
+            // 数据目录信息
+            statusText += '数据目录:\n';
+            if (status.data_dir) {
+                statusText += `  路径: ${status.data_dir}\n`;
+                statusText += `  存在: ${status.data_dir_exists ? '是' : '否'}\n`;
+            } else {
+                statusText += `  路径: 未安装\n`;
+                statusText += `  存在: 否\n`;
+            }
+
+            statusText += `\n最后更新: ${new Date().toLocaleString('zh-CN')}`;
+
+            return statusText;
+        }
+
+        async function updateSyncServerStatus() {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.getSyncServerStatus !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.getSyncServerStatus === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    return; // 静默失败，因为这个函数会被定时调用
+                }
+            }
+            
+            try {
+                const status = await window.API.getSyncServerStatus();
+                const statusElement = document.getElementById('sync-server-status');
+
+                if (status?.running) {
+                    statusElement.textContent = `状态: 运行中 (端口: ${status.port}, 主机: ${status.host})`;
+                    statusElement.className = 'sync-status sync-running';
+                } else {
+                    statusElement.textContent = '状态: 已停止';
+                    statusElement.className = 'sync-status sync-stopped';
+                }
+            } catch (error) {
+                const statusElement = document.getElementById('sync-server-status');
+                statusElement.textContent = '状态: 未知';
+                statusElement.className = 'sync-status sync-stopped';
+            }
+        }
+
+        async function loadInitialConfig() {
+            try {
+                // 确保API对象及其方法存在
+                if (typeof window.API === 'undefined') {
+                    console.error('API对象未定义');
+                    return;
+                }
+                
+                // 检查getConfig方法是否存在，如果不存在则尝试使用备用API
+                if (typeof window.API.getConfig !== 'function') {
+                    // 尝试使用备用API对象
+                    if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.getConfig === 'function') {
+                        window.API = window.SillyTavernAPI;
+                    } else {
+                        console.error('API对象缺少getConfig方法');
+                        return;
+                    }
+                }
+                
+                const config = await window.API.getConfig();
+
+                if (config && config.data) {
+                    const configData = config.data;
+                    // 加载镜像配置
+                    if (configData.github_mirror) {
+                        document.getElementById('mirror-input').value = configData.github_mirror;
+                    }
+
+                    // 加载SillyTavern配置
+                    if (configData.sillytavern) {
+                        if (configData.sillytavern.port) {
+                            document.getElementById('st-port-input').value = configData.sillytavern.port;
+                        }
+                        if (configData.sillytavern.listen !== undefined) {
+                            document.getElementById('listen-all-checkbox').checked = configData.sillytavern.listen;
+                        }
+                    }
+
+                    // 加载同步配置
+                    if (configData.sync) {
+                        if (configData.sync.port) {
+                            document.getElementById('sync-port-input').value = configData.sync.port;
+                        }
+                        if (configData.sync.host) {
+                            document.getElementById('sync-host-input').value = configData.sync.host;
+                        }
+                    }
+
+                    // 加载自动启动配置
+                    if (configData.autostart !== undefined) {
+                        document.getElementById('autostart-checkbox').checked = configData.autostart;
+                    }
+                    
+                    // 加载本地IP
+                    if (configData.local_ip) {
+                        document.getElementById('ip-text').textContent = `本地IP: ${configData.local_ip}`;
+                    }
+                }
+            } catch (error) {
+                console.error('加载初始配置失败:', error);
+            }
+        }
+
+        async function toggleAutostart(enabled) {
+            // 确保API对象可用
+            if (typeof window.API === 'undefined' || typeof window.API.setAutostart !== 'function') {
+                // 尝试使用备用API对象
+                if (typeof window.SillyTavernAPI !== 'undefined' && typeof window.SillyTavernAPI.setAutostart === 'function') {
+                    window.API = window.SillyTavernAPI;
+                } else {
+                    showSnackbar('API未正确加载，请刷新页面', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const result = await window.API.setAutostart(enabled);
+                if (result.success) {
+                    addLog(`一键启动模式: ${enabled ? '启用' : '禁用'}`);
+                    showSnackbar(`一键启动模式已${enabled ? '启用' : '禁用'}`, 'success');
+                } else {
+                    addLog(`设置一键启动模式失败: ${result.message}`);
+                    showSnackbar(`设置失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`设置一键启动模式时出错: ${error.message}`);
+                showSnackbar(`设置出错: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -68,7 +68,7 @@ if [ -f "requirements.txt" ]; then
     pip install -r requirements.txt
 else
     # 备用方案：安装核心依赖和同步服务器依赖
-    pip install ruamel.yaml flask requests remi
+    pip install ruamel.yaml flask requests 
 fi
 
 # 创建启动脚本
