@@ -872,7 +872,7 @@ class SillyTavernCliLauncher:
                 # 备用方案：直接安装核心依赖
                 success = self.run_command_with_output([
                     venv_python, "-m", "pip", "install", "--upgrade",
-                    "ruamel.yaml", "flask", "requests"  # 只安装实际使用的依赖
+                    "ruamel.yaml", "flask","remi", "requests"  # 只安装实际使用的依赖
                 ], cwd=launcher_dir)
             
             if not success:
@@ -906,7 +906,6 @@ class SillyTavernCliLauncher:
             start_webui(host=host, port=port, start_browser=True)
         except ImportError:
             print("错误: 未找到 WebUI 模块或 remi 依赖")
-            print("请运行: pip install remi")
         except Exception as e:
             print(f"启动 WebUI 失败: {e}")
 
