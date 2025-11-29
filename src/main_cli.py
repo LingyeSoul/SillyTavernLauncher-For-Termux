@@ -897,6 +897,19 @@ class SillyTavernCliLauncher:
             print(f"更新过程中出现未知错误: {e}")
             return
 
+    def start_webui(self, host='127.0.0.1', port=8080):
+        """启动WebUI"""
+        try:
+            from webui import start_webui
+            print(f"正在启动 WebUI...")
+            print(f"访问地址: http://{host}:{port}")
+            start_webui(host=host, port=port, start_browser=True)
+        except ImportError:
+            print("错误: 未找到 WebUI 模块或 remi 依赖")
+            print("请运行: pip install remi")
+        except Exception as e:
+            print(f"启动 WebUI 失败: {e}")
+
     def show_menu(self):
         """显示菜单UI"""
         while True:
@@ -912,12 +925,13 @@ class SillyTavernCliLauncher:
             print("7. 更新 SillyTavernLauncher")
             print("8. 设置 GitHub 镜像")
             print("9. 数据同步(测试中)")
+            print("10. 启动 WebUI (测试)")
             print("0. 退出")
             print("="*50)
             
             try:
-                choice = input("请选择操作 [0-9]: ").strip()
-                
+                choice = input("请选择操作 [0-10]: ").strip()
+
                 if choice == "1":
                     self.install_sillytavern()
                 elif choice == "2":
@@ -945,11 +959,13 @@ class SillyTavernCliLauncher:
                     self.show_mirror_menu()
                 elif choice == "9":
                     self.show_sync_menu()
+                elif choice == "10":
+                    self.start_webui()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-9 之间的数字")
+                    print("无效选择，请输入 0-10 之间的数字")
                     
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")

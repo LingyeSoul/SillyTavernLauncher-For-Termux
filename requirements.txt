@@ -4,3 +4,6 @@ ruamel.yaml
 # 同步服务器依赖
 flask
 requests
+
+# WebUI 依赖
+remi
