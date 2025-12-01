@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import socket
+import queue
 from config import ConfigManager
 from stconfig import stcfg
 
@@ -165,7 +166,7 @@ class SillyTavernCliLauncher:
             return
 
     def start_sillytavern(self):
-        """启动SillyTavern"""
+        """启动SillyTavern - 使用多线程实时输出处理"""
         print("正在启动 SillyTavern...")
         try:
             # 获取SillyTavern目录
@@ -181,29 +182,151 @@ class SillyTavernCliLauncher:
                 else:
                     print("取消启动")
                     return
-            
+
             # 构建启动命令
             cmd = ["node", "server.js"]
-            
+
             # 如果配置了端口
             if hasattr(self.stCfg, 'port') and self.stCfg.port:
                 cmd.extend(["--port", str(self.stCfg.port)])
-            
+
             # 如果配置了监听所有地址
             if hasattr(self.stCfg, 'listen') and self.stCfg.listen:
                 cmd.append("--listen")
-            
+
             print(f"启动命令: {' '.join(cmd)}")
             print(f"工作目录: {st_dir}")
-            
-            # 切换到SillyTavern目录
-            os.chdir(st_dir)
-            
-            # 使用os.execvp替换当前进程
-            print("SillyTavern 已启动")
             print("-" * 50)
-            os.execvp("node", cmd)
-            
+            print("SillyTavern 启动中，实时输出:")
+            print("-" * 50)
+
+            # 启动子进程
+            process = subprocess.Popen(
+                cmd,
+                cwd=st_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+
+            # 创建共享队列用于线程间通信
+            output_queue = queue.Queue()
+
+            # 创建并启动stdout读取线程
+            stdout_thread = threading.Thread(
+                target=self._enqueue_output,
+                args=(process.stdout, output_queue, 'STDOUT'),
+                daemon=True
+            )
+            stdout_thread.start()
+
+            # 创建并启动stderr读取线程
+            stderr_thread = threading.Thread(
+                target=self._enqueue_output,
+                args=(process.stderr, output_queue, 'STDERR'),
+                daemon=True
+            )
+            stderr_thread.start()
+
+            # 跟踪流完成状态
+            stdout_finished = False
+            stderr_finished = False
+
+            # 主循环：消费队列并监控进程状态
+            try:
+                while (process.poll() is None or not stdout_finished or not stderr_finished):
+                    try:
+                        # 尝试从队列获取数据，设置短超时以便定期检查进程状态
+                        stream_name, line = output_queue.get(timeout=0.1)
+
+                        if line is None:
+                            # 收到流结束标记
+                            if stream_name == 'STDOUT':
+                                stdout_finished = True
+                            elif stream_name == 'STDERR':
+                                stderr_finished = True
+                            continue
+
+                        # 输出到终端，带流标识
+                        if stream_name == 'STDERR':
+                            # 错误输出使用红色（如果终端支持）
+                            print(f"[ERROR] {line}", flush=True)
+                        else:
+                            # 标准输出直接显示
+                            print(f"[INFO] {line}", flush=True)
+
+                    except queue.Empty:
+                        # 队列为空，继续循环检查进程状态
+                        continue
+
+                # 等待进程完全结束
+                return_code = process.wait()
+
+                # 处理剩余的队列数据
+                while not output_queue.empty():
+                    try:
+                        stream_name, line = output_queue.get_nowait()
+                        if line is not None:
+                            if stream_name == 'STDERR':
+                                print(f"[ERROR] {line}", flush=True)
+                            else:
+                                print(f"[INFO] {line}", flush=True)
+                    except queue.Empty:
+                        break
+
+                # 进程结束信息
+                print("-" * 50)
+                if return_code == 0:
+                    print(f"SillyTavern 正常退出 (返回码: {return_code})")
+                else:
+                    print(f"SillyTavern 异常退出 (返回码: {return_code})")
+                print("-" * 50)
+
+                # 等待I/O线程完成收尾工作
+                stdout_thread.join(timeout=1.0)
+                stderr_thread.join(timeout=1.0)
+
+            except KeyboardInterrupt:
+                print("\n收到中断信号 (Ctrl+C)，正在停止 SillyTavern...")
+
+                # 尝试优雅地终止进程
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                    print("SillyTavern 已优雅停止")
+                except subprocess.TimeoutExpired:
+                    print("等待超时，强制终止进程...")
+                    process.kill()
+                    process.wait()
+                    print("SillyTavern 已强制终止")
+
+                # 输出缓冲区中剩余的数据
+                while not output_queue.empty():
+                    try:
+                        stream_name, line = output_queue.get_nowait()
+                        if line is not None:
+                            print(f"[{stream_name}] {line}")
+                    except queue.Empty:
+                        break
+
+            except Exception as e:
+                print(f"监控 SillyTavern 进程时发生错误: {e}")
+
+                # 确保进程被清理
+                try:
+                    if process.poll() is None:
+                        process.terminate()
+                        process.wait(timeout=5)
+                except:
+                    try:
+                        process.kill()
+                    except:
+                        pass
+
         except Exception as e:
             print(f"启动 SillyTavern 时出错: {e}")
 
@@ -477,6 +600,37 @@ class SillyTavernCliLauncher:
         except Exception:
             # Fallback to common local IPs
             return "127.0.0.1"
+
+    def _enqueue_output(self, pipe, output_queue, stream_name):
+        """
+        辅助线程函数：持续读取管道输出并放入队列
+
+        Args:
+            pipe: 输入管道 (stdout 或 stderr)
+            output_queue: 共享队列
+            stream_name: 流名称标识 ('STDOUT' 或 'STDERR')
+        """
+        try:
+            for line in iter(pipe.readline, ''):
+                if line:  # 非空行
+                    # 去除行尾换行符，保留原始格式
+                    clean_line = line.rstrip('\n\r')
+                    output_queue.put((stream_name, clean_line))
+                else:
+                    break  # EOF
+
+            # 发送流结束标记
+            output_queue.put((stream_name, None))
+        except Exception as e:
+            # 发送错误信息
+            output_queue.put((stream_name, f"读取{stream_name}时发生错误: {e}"))
+            output_queue.put((stream_name, None))
+        finally:
+            # 确保管道被关闭
+            try:
+                pipe.close()
+            except:
+                pass
 
     
     def _connect_and_sync(self, server_url):
