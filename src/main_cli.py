@@ -9,7 +9,6 @@ import socket
 from config import ConfigManager
 from stconfig import stcfg
 from st_version_manager import STVersionManager
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from termux_git_utils import checkout_st_version, check_git_status, get_current_commit
 
 class SillyTavernCliLauncher:
