@@ -8,6 +8,9 @@ import time
 import socket
 from config import ConfigManager
 from stconfig import stcfg
+from st_version_manager import STVersionManager
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from termux_git_utils import checkout_st_version, check_git_status, get_current_commit
 
 class SillyTavernCliLauncher:
     def __init__(self):
@@ -21,6 +24,7 @@ class SillyTavernCliLauncher:
         self.check_system_env()
 
         self.stCfg = stcfg()
+        self.version_manager = STVersionManager()
 
     def check_system_env(self):
         """检查系统环境依赖"""
@@ -912,12 +916,13 @@ class SillyTavernCliLauncher:
             print("7. 更新 SillyTavernLauncher")
             print("8. 设置 GitHub 镜像")
             print("9. 数据同步(测试中)")
+            print("10. 版本管理")
             print("0. 退出")
             print("="*50)
-            
+
             try:
-                choice = input("请选择操作 [0-9]: ").strip()
-                
+                choice = input("请选择操作 [0-10]: ").strip()
+
                 if choice == "1":
                     self.install_sillytavern()
                 elif choice == "2":
@@ -945,12 +950,14 @@ class SillyTavernCliLauncher:
                     self.show_mirror_menu()
                 elif choice == "9":
                     self.show_sync_menu()
+                elif choice == "10":
+                    self.show_version_menu()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-9 之间的数字")
-                    
+                    print("无效选择，请输入 0-10 之间的数字")
+
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
                 break
@@ -968,9 +975,9 @@ class SillyTavernCliLauncher:
         print("6. github.acmsz.top")
         print("7. git.yylx.win")
         print("0. 返回上级菜单")
-        
+
         choice = input("请选择镜像源 [0-7]: ").strip()
-        
+
         mirror_map = {
             "1": "github",
             "2": "gh-proxy.org",
@@ -980,7 +987,7 @@ class SillyTavernCliLauncher:
             "6": "github.acmsz.top",
             "7": "git.yylx.win"
         }
-        
+
         if choice in mirror_map:
             self.set_github_mirror(mirror_map[choice])
         elif choice == "0":
@@ -988,11 +995,217 @@ class SillyTavernCliLauncher:
         else:
             print("无效选择")
 
+    def show_version_info(self):
+        """显示当前版本信息"""
+        print("\n" + "="*50)
+        print("当前版本信息")
+        print("="*50)
+
+        # 获取当前版本号
+        result = self.version_manager.get_current_version()
+        if result['success']:
+            print(f"当前版本: v{result['version']}")
+        else:
+            print(f"当前版本: 未知 ({result['error']})")
+
+        # 获取当前commit
+        st_dir = os.path.join(os.getcwd(), "SillyTavern")
+        success, commit, msg = get_current_commit(st_dir)
+        if success:
+            print(f"当前commit: {commit[:7]}")
+
+            # 获取当前分支
+            try:
+                result = subprocess.run(
+                    ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                    capture_output=True,
+                    text=True,
+                    cwd=st_dir
+                )
+                if result.returncode == 0:
+                    branch = result.stdout.strip()
+                    print(f"当前分支: {branch}")
+            except:
+                pass
+        else:
+            print(f"Git状态: {msg}")
+
+        print("="*50)
+
+    def list_available_versions(self):
+        """列出可用版本"""
+        print("\n正在获取版本列表...")
+
+        # 获取镜像配置
+        mirror = self.config_manager.get("github.mirror", "github")
+
+        # 获取版本列表
+        result = self.version_manager.run_fetch_async(mirror=mirror)
+
+        if not result['success']:
+            print(f"获取版本列表失败: {result['error']}")
+            return
+
+        versions = result['versions']
+        latest = result['latest']
+
+        print(f"\n最新版本: v{latest}")
+        print("\n可用版本:")
+
+        formatted = self.version_manager.format_version_list(versions, latest, limit=20)
+        for v in formatted:
+            print(v)
+
+        print(f"\n共 {len(versions)} 个版本可用")
+
+    def switch_version_interactive(self):
+        """交互式切换版本"""
+        print("\n" + "="*50)
+        print("版本切换")
+        print("="*50)
+
+        # 显示当前版本
+        self.show_version_info()
+
+        # 获取版本列表
+        print("\n正在获取可用版本列表...")
+        mirror = self.config_manager.get("github.mirror", "github")
+        result = self.version_manager.run_fetch_async(mirror=mirror)
+
+        if not result['success']:
+            print(f"获取版本列表失败: {result['error']}")
+            return
+
+        versions = result['versions']
+        latest = result['latest']
+
+        # 显示最近10个版本
+        print("\n可用版本 (最近10个):")
+        sorted_versions = sorted(versions.items(), reverse=True)[:10]
+
+        for i, (ver_str, ver_data) in enumerate(sorted_versions, 1):
+            commit = ver_data.get('commit', '')[:7]
+            is_latest = ver_str == latest
+            latest_mark = " [最新]" if is_latest else ""
+            print(f"{i}. v{ver_str}{latest_mark} - {commit}")
+
+        print("0. 取消")
+        print("="*50)
+
+        # 用户选择版本
+        choice = input("\n请选择版本编号 [0-10]: ").strip()
+
+        if choice == "0":
+            print("取消切换")
+            return
+
+        try:
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(sorted_versions):
+                ver_str, ver_data = sorted_versions[choice_idx]
+                commit_hash = ver_data.get('commit', '')
+
+                print(f"\n准备切换到版本 v{ver_str} (commit: {commit_hash[:7]})...")
+
+                # 确认切换
+                confirm = input("确认切换? 版本切换后需要重新安装依赖 (y/N): ").strip()
+                if confirm.lower() != 'y':
+                    print("取消切换")
+                    return
+
+                # 检查Git状态
+                st_dir = os.path.join(os.getcwd(), "SillyTavern")
+                is_clean, status_msg = check_git_status(st_dir)
+
+                if not is_clean:
+                    print(f"警告: {status_msg}")
+                    confirm = input("仍然继续切换? 本地更改将被stash保存 (y/N): ").strip()
+                    if confirm.lower() != 'y':
+                        print("取消切换")
+                        return
+
+                # 执行版本切换
+                print("\n开始切换版本...")
+                success, message = checkout_st_version(commit_hash, st_dir)
+
+                if success:
+                    print(f"✓ {message}")
+                    print(f"✓ 成功切换到版本 v{ver_str}")
+
+                    # 询问是否重新安装依赖
+                    install_deps = input("\n是否重新安装依赖? (推荐) (Y/n): ").strip()
+                    if install_deps.lower() != 'n':
+                        print("\n正在安装依赖...")
+                        if mirror != "github":
+                            success = self.run_command_with_output([
+                                "npm", "install", "--no-audit", "--no-fund",
+                                "--registry=https://registry.npmmirror.com"
+                            ], cwd=st_dir)
+                        else:
+                            success = self.run_command_with_output([
+                                "npm", "install", "--no-audit", "--no-fund"
+                            ], cwd=st_dir)
+
+                        if success:
+                            print("✓ 依赖安装完成")
+                        else:
+                            print("✗ 依赖安装失败，请手动运行 npm install")
+
+                    print("\n版本切换完成!")
+                else:
+                    print(f"✗ {message}")
+                    print("✗ 版本切换失败")
+            else:
+                print("无效的版本编号")
+        except ValueError:
+            print("请输入有效的数字")
+
+    def show_version_menu(self):
+        """显示版本管理菜单"""
+        while True:
+            print("\n" + "="*50)
+            print("版本管理菜单")
+            print("="*50)
+
+            # 快速显示当前版本
+            result = self.version_manager.get_current_version()
+            if result['success']:
+                print(f"当前版本: v{result['version']}")
+            else:
+                print("当前版本: 未知")
+
+            print("\n选项:")
+            print("1. 查看当前版本信息")
+            print("2. 列出可用版本")
+            print("3. 切换版本")
+            print("0. 返回主菜单")
+            print("="*50)
+
+            try:
+                choice = input("请选择操作 [0-3]: ").strip()
+
+                if choice == "1":
+                    self.show_version_info()
+                elif choice == "2":
+                    self.list_available_versions()
+                elif choice == "3":
+                    self.switch_version_interactive()
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-3 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n收到退出信号，返回主菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync"
+        "autostart", "update", "menu", "set-mirror", "sync", "version"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1002,9 +1215,11 @@ def main():
     parser.add_argument("--method", choices=['auto', 'zip', 'incremental'],
                        default='auto', help="同步方法")
     parser.add_argument("--no-backup", action='store_true', help="同步时不备份现有数据")
-    
+    parser.add_argument("--commit", help="指定版本commit")
+    parser.add_argument("--version-str", help="指定版本号")
+
     args = parser.parse_args()
-    
+
     launcher = SillyTavernCliLauncher()
     
     # 检查是否启用了"一键启动"功能
@@ -1099,6 +1314,101 @@ def main():
             print("  st sync start --port 8080")
             print("  st sync from --server-url http://192.168.1.100:5000")
             print("  st sync from --server-url http://192.168.1.100:5000 --method zip")
+    elif args.command == "version":
+        if args.subcommand == "info":
+            launcher.show_version_info()
+        elif args.subcommand == "list":
+            launcher.list_available_versions()
+        elif args.subcommand == "switch":
+            if args.commit:
+                # 使用指定的commit切换版本
+                st_dir = os.path.join(os.getcwd(), "SillyTavern")
+                if not os.path.exists(st_dir):
+                    print("错误: SillyTavern 未安装")
+                    return
+
+                print(f"切换到commit: {args.commit[:7]}")
+
+                # 检查Git状态
+                is_clean, status_msg = check_git_status(st_dir)
+                if not is_clean:
+                    print(f"警告: {status_msg}")
+                    confirm = input("仍然继续切换? 本地更改将被stash保存 (y/N): ").strip()
+                    if confirm.lower() != 'y':
+                        print("取消切换")
+                        return
+
+                # 执行版本切换
+                success, message = checkout_st_version(args.commit, st_dir)
+                if success:
+                    print(f"✓ {message}")
+                    print("\n建议重新安装依赖: npm install")
+                else:
+                    print(f"✗ {message}")
+            elif args.version_str:
+                # 根据版本号查找对应的commit
+                print(f"查找版本 v{args.version_str}...")
+
+                mirror = launcher.config_manager.get("github.mirror", "github")
+                result = launcher.version_manager.run_fetch_async(mirror=mirror)
+
+                if not result['success']:
+                    print(f"获取版本列表失败: {result['error']}")
+                    return
+
+                versions = result['versions']
+                if args.version_str not in versions:
+                    print(f"未找到版本 v{args.version_str}")
+                    return
+
+                commit_hash = versions[args.version_str].get('commit', '')
+                print(f"找到commit: {commit_hash[:7]}")
+
+                # 切换版本
+                st_dir = os.path.join(os.getcwd(), "SillyTavern")
+                if not os.path.exists(st_dir):
+                    print("错误: SillyTavern 未安装")
+                    return
+
+                # 检查Git状态
+                is_clean, status_msg = check_git_status(st_dir)
+                if not is_clean:
+                    print(f"警告: {status_msg}")
+                    confirm = input("仍然继续切换? 本地更改将被stash保存 (y/N): ").strip()
+                    if confirm.lower() != 'y':
+                        print("取消切换")
+                        return
+
+                # 执行版本切换
+                success, message = checkout_st_version(commit_hash, st_dir)
+                if success:
+                    print(f"✓ {message}")
+                    print("\n建议重新安装依赖: npm install")
+                else:
+                    print(f"✗ {message}")
+            else:
+                print("请提供 --commit 或 --version-str 参数")
+                print("示例:")
+                print("  st version switch --commit abc1234")
+                print("  st version switch --version-str 1.5.0")
+        elif args.subcommand == "menu":
+            launcher.show_version_menu()
+        else:
+            print("可用的版本管理子命令:")
+            print("  st version info         - 查看当前版本信息")
+            print("  st version list         - 列出可用版本")
+            print("  st version switch       - 切换版本")
+            print("  st version menu         - 进入版本管理菜单")
+            print("")
+            print("切换版本的参数:")
+            print("  --commit <hash>         - 指定commit hash (前7位或完整hash)")
+            print("  --version-str <ver>     - 指定版本号 (例如: 1.5.0)")
+            print("")
+            print("示例:")
+            print("  st version info")
+            print("  st version list")
+            print("  st version switch --commit abc1234")
+            print("  st version switch --version-str 1.5.0")
 
 if __name__ == "__main__":
     main()
