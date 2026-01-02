@@ -868,43 +868,34 @@ class SillyTavernCliLauncher:
 
         Args:
             restart_after: 更新后是否重启启动器
-            allow_dev: 是否允许开发版更新
+            allow_dev: 是否允许开发版更新（dev模式下强制更新到最新git仓库）
         """
-        # 检查是否有可用更新
-        mirror = self.config_manager.get("github.mirror", "github")
-        self.update_checker.mirror = mirror
-
-        result = self.update_checker.check_update_sync(timeout=10, allow_dev=allow_dev)
-
-        if result["has_error"]:
-            print(f"检查更新失败: {result['error_message']}")
-            return
-
-        if not result["has_update"]:
-            print(f"✅ 当前已是最新版本: v{result['current_version']}")
-            if allow_dev and result.get("is_dev_version", False):
-                print(f"   (开发版模式已启用)")
-            return
-
-        print(f"发现新版本: v{result['current_version']} -> v{result['latest_version']}", end="")
-        if result.get("is_dev_version", False):
-            print(" [开发版]", end="")
-        print()
-
-        # 确认更新
-        if result.get("is_dev_version", False) and not allow_dev:
-            print("⚠️ 警告: 当前为开发版，正常模式下不会更新")
-            confirm = input("是否继续更新到开发版? (y/N): ").strip()
-            if confirm.lower() != 'y':
-                print("取消更新")
-                return
-        elif result.get("is_dev_version", False) and allow_dev:
-            print("⚠️ 注意: 您正在更新到开发版，可能存在不稳定的情况")
-            confirm = input("是否继续? (Y/n): ").strip()
+        # 开发版模式：强制更新到最新git仓库，无视版本号
+        if allow_dev:
+            print("🚀 开发版更新模式：强制更新到最新 git 仓库版本")
+            print("⚠️ 注意: 这将无视版本号，直接拉取最新代码")
+            confirm = input("是否继续强制更新? (Y/n): ").strip()
             if confirm.lower() == 'n':
                 print("取消更新")
                 return
         else:
+            # 稳定版模式：检查版本号
+            mirror = self.config_manager.get("github.mirror", "github")
+            self.update_checker.mirror = mirror
+
+            result = self.update_checker.check_update_sync(timeout=10, allow_dev=allow_dev)
+
+            if result["has_error"]:
+                print(f"检查更新失败: {result['error_message']}")
+                return
+
+            if not result["has_update"]:
+                print(f"✅ 当前已是最新版本: v{result['current_version']}")
+                return
+
+            print(f"发现新版本: v{result['current_version']} -> v{result['latest_version']}")
+
+            # 确认更新
             confirm = input("确认更新? (Y/n): ").strip()
             if confirm.lower() == 'n':
                 print("取消更新")
