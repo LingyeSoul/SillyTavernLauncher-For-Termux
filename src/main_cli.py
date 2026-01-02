@@ -840,13 +840,9 @@ class SillyTavernCliLauncher:
         print("2. 更新 SillyTavernLauncher")
         print("3. 更新所有内容")
         print("4. 重启启动器")
-        if allow_dev:
-            print("5. 切换到稳定版更新模式")
-        else:
-            print("5. 切换到开发版更新模式")
         print("0. 取消")
 
-        choice = input("请输入选项 [0-5]: ").strip()
+        choice = input("请输入选项 [0-4]: ").strip()
 
         if choice == "1":
             self.update_sillytavern()
@@ -861,9 +857,6 @@ class SillyTavernCliLauncher:
             args = sys.argv[1:]  # 获取除脚本名外的所有参数
             # 重新执行脚本
             os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + ["menu"])
-        elif choice == "5":
-            # 切换开发/稳定版模式
-            self.update_interactive(allow_dev=not allow_dev)
         elif choice == "0":
             print("取消更新")
         else:
@@ -987,17 +980,16 @@ class SillyTavernCliLauncher:
             print("4. 启用一键启动")
             print("5. 禁用一键启动")
             print("6. 更新 SillyTavern")
-            print("7. 更新 SillyTavernLauncher")
+            print("7. 更新启动器")
             print("8. 设置 GitHub 镜像")
             print("9. 数据同步(测试中)")
             print("10. 版本管理")
             print("11. SillyTavern 配置")
-            print("12. 检查更新")
             print("0. 退出")
             print("="*50)
 
             try:
-                choice = input("请选择操作 [0-12]: ").strip()
+                choice = input("请选择操作 [0-11]: ").strip()
 
                 if choice == "1":
                     self.install_sillytavern()
@@ -1021,7 +1013,7 @@ class SillyTavernCliLauncher:
                 elif choice == "6":
                     self.update_sillytavern()
                 elif choice == "7":
-                    self.update_launcher(True)  # 更新启动器后需要重启
+                    self.show_update_menu()
                 elif choice == "8":
                     self.show_mirror_menu()
                 elif choice == "9":
@@ -1030,13 +1022,11 @@ class SillyTavernCliLauncher:
                     self.show_version_menu()
                 elif choice == "11":
                     self.show_st_config_menu()
-                elif choice == "12":
-                    self.check_launcher_update()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-12 之间的数字")
+                    print("无效选择，请输入 0-11 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
@@ -1049,20 +1039,100 @@ class SillyTavernCliLauncher:
         def check_in_background():
             mirror = self.config_manager.get("github.mirror", "github")
             self.update_checker.mirror = mirror
-            result = self.update_checker.check_update_sync(timeout=10)
+            result = self.update_checker.check_update_sync(timeout=10, allow_dev=False)
 
             if not result["has_error"] and result["has_update"]:
                 self.update_available = True
                 self.latest_version = result["latest_version"]
                 # 有新版本时显示提示
-                print(f"\n✨ 发现启动器新版本: v{result['latest_version']}")
+                is_dev_mark = " [开发版]" if result.get("is_dev_version", False) else ""
+                print(f"\n✨ 发现启动器新版本: v{result['latest_version']}{is_dev_mark}")
                 print(f"   当前版本: v{result['current_version']}")
-                print(f"   提示: 可选择菜单项 '7' 或 '12' 进行更新")
+                if result.get("is_dev_version", False):
+                    print(f"   提示: 可选择菜单项 '7' - '更新到开发版' 进行更新")
+                else:
+                    print(f"   提示: 可选择菜单项 '7' - '检查并更新' 进行更新")
 
         import threading
         thread = threading.Thread(target=check_in_background)
         thread.daemon = True
         thread.start()
+
+    def show_update_menu(self):
+        """显示更新管理菜单"""
+        while True:
+            print("\n" + "="*50)
+            print("启动器更新管理")
+            print("="*50)
+
+            # 显示当前版本和更新状态
+            update_status = ""
+            if self.update_available:
+                update_status = f" → v{self.latest_version}"
+            print(f"当前版本: v{self.launcher_version}{update_status}")
+
+            print("\n选项:")
+            print("1. 检查更新")
+            print("2. 更新到稳定版")
+            print("3. 查看版本信息")
+            print("0. 返回主菜单")
+            print("="*50)
+
+            try:
+                choice = input("请选择操作 [0-3]: ").strip()
+
+                if choice == "1":
+                    # 检查更新（稳定版）
+                    self.check_launcher_update(allow_dev=False)
+                    input("\n按 Enter 继续...")
+                elif choice == "2":
+                    # 更新到稳定版
+                    print("\n正在检查稳定版更新...")
+                    self.update_launcher(restart_after=True, allow_dev=False)
+                elif choice == "3":
+                    # 查看详细版本信息
+                    print("\n" + "="*50)
+                    print("启动器版本信息")
+                    print("="*50)
+                    print(f"当前版本: v{self.launcher_version}")
+                    if self.update_available:
+                        print(f"可用更新: v{self.latest_version}")
+
+                    # 显示Git信息
+                    try:
+                        result = subprocess.run(
+                            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                            capture_output=True,
+                            text=True,
+                            cwd=os.getcwd()
+                        )
+                        if result.returncode == 0:
+                            branch = result.stdout.strip()
+                            print(f"当前分支: {branch}")
+
+                        result = subprocess.run(
+                            ['git', 'log', '-1', '--format=%h - %s'],
+                            capture_output=True,
+                            text=True,
+                            cwd=os.getcwd()
+                        )
+                        if result.returncode == 0:
+                            print(f"最新提交: {result.stdout.strip()}")
+                    except:
+                        pass
+
+                    print("="*50)
+                    input("\n按 Enter 继续...")
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-3 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n收到退出信号，返回主菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
 
     def show_mirror_menu(self):
         """显示镜像设置菜单"""
