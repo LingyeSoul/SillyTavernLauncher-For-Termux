@@ -9,7 +9,9 @@ import socket
 from config import ConfigManager
 from stconfig import stcfg
 from st_version_manager import STVersionManager
-from termux_git_utils import checkout_st_version, check_git_status, get_current_commit
+from git_utils import checkout_st_version, check_git_status, get_current_commit
+from update_checker import UpdateChecker
+from version import version as current_version
 
 class SillyTavernCliLauncher:
     def __init__(self):
@@ -24,6 +26,13 @@ class SillyTavernCliLauncher:
 
         self.stCfg = stcfg()
         self.version_manager = STVersionManager()
+
+        # 初始化更新检查器
+        self.launcher_version = current_version
+        mirror = self.config_manager.get("github.mirror", "github")
+        self.update_checker = UpdateChecker(current_version=self.launcher_version, mirror=mirror)
+        self.update_available = False
+        self.latest_version = None
 
     def check_system_env(self):
         """检查系统环境依赖"""
@@ -804,60 +813,124 @@ class SillyTavernCliLauncher:
             except Exception as e:
                 print(f"发生错误: {e}")
 
-    def update_component(self, component):
-        """更新指定组件"""
+    def update_component(self, component, allow_dev=False):
+        """
+        更新指定组件
+
+        Args:
+            component: 组件名称 ('st' 或 'stl')
+            allow_dev: 是否允许开发版更新
+        """
         if component == "st":
             self.update_sillytavern()
         elif component == "stl":
-            self.update_launcher(True)  # 更新启动器后需要重启
+            self.update_launcher(restart_after=True, allow_dev=allow_dev)
         else:
             print(f"未知组件: {component}，支持的组件: st, stl")
 
-    def update_interactive(self):
-        """交互式更新选择"""
+    def update_interactive(self, allow_dev=False):
+        """
+        交互式更新选择
+
+        Args:
+            allow_dev: 是否允许开发版更新
+        """
         print("\n请选择要更新的内容:")
         print("1. 更新 SillyTavern")
         print("2. 更新 SillyTavernLauncher")
         print("3. 更新所有内容")
         print("4. 重启启动器")
+        if allow_dev:
+            print("5. 切换到稳定版更新模式")
+        else:
+            print("5. 切换到开发版更新模式")
         print("0. 取消")
-        
-        choice = input("请输入选项 [0-4]: ").strip()
-        
+
+        choice = input("请输入选项 [0-5]: ").strip()
+
         if choice == "1":
             self.update_sillytavern()
         elif choice == "2":
-            self.update_launcher(True)  # 更新启动器后需要重启
+            self.update_launcher(restart_after=True, allow_dev=allow_dev)
         elif choice == "3":
             self.update_sillytavern()
-            self.update_launcher(True)  # 更新启动器后需要重启
+            self.update_launcher(restart_after=True, allow_dev=allow_dev)
         elif choice == "4":
             print("正在重新启动启动器...")
             # 获取当前的参数
             args = sys.argv[1:]  # 获取除脚本名外的所有参数
             # 重新执行脚本
             os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + ["menu"])
+        elif choice == "5":
+            # 切换开发/稳定版模式
+            self.update_interactive(allow_dev=not allow_dev)
         elif choice == "0":
             print("取消更新")
         else:
             print("无效选择")
 
-    def update_launcher(self, restart_after=False):
-        """更新SillyTavernLauncher本身"""
-        print("正在更新 SillyTavernLauncher...")
-        
+    def update_launcher(self, restart_after=False, allow_dev=False):
+        """
+        更新SillyTavernLauncher本身
+
+        Args:
+            restart_after: 更新后是否重启启动器
+            allow_dev: 是否允许开发版更新
+        """
+        # 检查是否有可用更新
+        mirror = self.config_manager.get("github.mirror", "github")
+        self.update_checker.mirror = mirror
+
+        result = self.update_checker.check_update_sync(timeout=10, allow_dev=allow_dev)
+
+        if result["has_error"]:
+            print(f"检查更新失败: {result['error_message']}")
+            return
+
+        if not result["has_update"]:
+            print(f"✅ 当前已是最新版本: v{result['current_version']}")
+            if allow_dev and result.get("is_dev_version", False):
+                print(f"   (开发版模式已启用)")
+            return
+
+        print(f"发现新版本: v{result['current_version']} -> v{result['latest_version']}", end="")
+        if result.get("is_dev_version", False):
+            print(" [开发版]", end="")
+        print()
+
+        # 确认更新
+        if result.get("is_dev_version", False) and not allow_dev:
+            print("⚠️ 警告: 当前为开发版，正常模式下不会更新")
+            confirm = input("是否继续更新到开发版? (y/N): ").strip()
+            if confirm.lower() != 'y':
+                print("取消更新")
+                return
+        elif result.get("is_dev_version", False) and allow_dev:
+            print("⚠️ 注意: 您正在更新到开发版，可能存在不稳定的情况")
+            confirm = input("是否继续? (Y/n): ").strip()
+            if confirm.lower() == 'n':
+                print("取消更新")
+                return
+        else:
+            confirm = input("确认更新? (Y/n): ").strip()
+            if confirm.lower() == 'n':
+                print("取消更新")
+                return
+
+        print("\n正在更新 SillyTavernLauncher...")
+
         try:
             # 获取当前目录（应该在SillyTavernLauncher目录中）
             launcher_dir = os.getcwd()
             print(f"工作目录: {launcher_dir}")
-            
+
             # 拉取最新代码
             print("正在拉取最新代码...")
             success = self.run_command_with_output(["git", "pull"], cwd=launcher_dir)
             if not success:
                 print("更新代码失败")
                 return
-            
+
             # 更新Python依赖
             print("正在更新Python依赖...")
             # 激活虚拟环境并更新依赖
@@ -871,23 +944,17 @@ class SillyTavernCliLauncher:
                 success = self.run_command_with_output([
                     venv_python, "-m", "pip", "install", "-r", "requirements.txt"
                 ], cwd=launcher_dir)
-            else:
-                # 备用方案：直接安装核心依赖
-                success = self.run_command_with_output([
-                    venv_python, "-m", "pip", "install", "--upgrade",
-                    "ruamel.yaml", "flask", "requests"  # 只安装实际使用的依赖
-                ], cwd=launcher_dir)
-            
+
             if not success:
                 print("依赖更新失败")
                 return
-            
+
             # 重载配置
             self.config_manager.reload()
             self.config = self.config_manager.config
-            
+
             print("SillyTavernLauncher 更新完成!")
-            
+
             # 如果需要重启
             if restart_after:
                 print("正在重新启动启动器...")
@@ -895,17 +962,25 @@ class SillyTavernCliLauncher:
                 args = sys.argv[1:]  # 获取除脚本名外的所有参数
                 # 重新执行脚本，强制进入菜单模式
                 os.execv(sys.executable, [sys.executable] + [sys.argv[0]] + ["menu"])
-            
+
         except Exception as e:
             print(f"更新过程中出现未知错误: {e}")
             return
 
     def show_menu(self):
         """显示菜单UI"""
+        # 首次显示菜单时，后台静默检查更新
+        self._background_check_update()
+
         while True:
             print("\n" + "="*50)
             print("SillyTavernLauncher 菜单")
             print("="*50)
+
+            # 显示当前版本和更新状态
+            update_marker = " [有新版本]" if self.update_available else ""
+            print(f"启动器版本: v{self.launcher_version}{update_marker}")
+
             print("1. 安装 SillyTavern")
             print("2. 启动 SillyTavern")
             print("3. 显示配置")
@@ -917,11 +992,12 @@ class SillyTavernCliLauncher:
             print("9. 数据同步(测试中)")
             print("10. 版本管理")
             print("11. SillyTavern 配置")
+            print("12. 检查更新")
             print("0. 退出")
             print("="*50)
 
             try:
-                choice = input("请选择操作 [0-11]: ").strip()
+                choice = input("请选择操作 [0-12]: ").strip()
 
                 if choice == "1":
                     self.install_sillytavern()
@@ -954,17 +1030,39 @@ class SillyTavernCliLauncher:
                     self.show_version_menu()
                 elif choice == "11":
                     self.show_st_config_menu()
+                elif choice == "12":
+                    self.check_launcher_update()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-11 之间的数字")
+                    print("无效选择，请输入 0-12 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
                 break
             except Exception as e:
                 print(f"发生错误: {e}")
+
+    def _background_check_update(self):
+        """后台静默检查更新"""
+        def check_in_background():
+            mirror = self.config_manager.get("github.mirror", "github")
+            self.update_checker.mirror = mirror
+            result = self.update_checker.check_update_sync(timeout=10)
+
+            if not result["has_error"] and result["has_update"]:
+                self.update_available = True
+                self.latest_version = result["latest_version"]
+                # 有新版本时显示提示
+                print(f"\n✨ 发现启动器新版本: v{result['latest_version']}")
+                print(f"   当前版本: v{result['current_version']}")
+                print(f"   提示: 可选择菜单项 '7' 或 '12' 进行更新")
+
+        import threading
+        thread = threading.Thread(target=check_in_background)
+        thread.daemon = True
+        thread.start()
 
     def show_mirror_menu(self):
         """显示镜像设置菜单"""
@@ -1303,6 +1401,50 @@ class SillyTavernCliLauncher:
             except Exception as e:
                 print(f"发生错误: {e}")
 
+    def check_launcher_update(self, allow_dev=False):
+        """
+        检查启动器更新
+
+        Args:
+            allow_dev: 是否允许开发版更新
+        """
+        print("\n正在检查启动器更新...")
+
+        # 更新镜像配置
+        mirror = self.config_manager.get("github.mirror", "github")
+        self.update_checker.mirror = mirror
+
+        # 同步检查更新
+        result = self.update_checker.check_update_sync(timeout=10, allow_dev=allow_dev)
+
+        if result["has_error"]:
+            print(f"检查失败: {result['error_message']}")
+            return False
+
+        self.update_available = result["has_update"]
+        self.latest_version = result["latest_version"]
+
+        if self.update_available:
+            print(f"\n✨ 发现新版本!")
+            print(f"   当前版本: v{result['current_version']}")
+            print(f"   最新版本: v{result['latest_version']}", end="")
+            if result.get("is_dev_version", False):
+                print(" [开发版]", end="")
+            print()
+            print(f"\n请使用以下命令更新启动器:")
+            if allow_dev:
+                print(f"   st update stl (当前允许开发版更新)")
+            else:
+                print(f"   st update stl")
+                if result.get("is_dev_version", False):
+                    print(f"\n⚠️ 注意: 当前为开发版，正常模式下不会更新")
+                    print(f"   如需更新到开发版，请使用: st update dev")
+            print(f"\n或访问: https://github.com/LingyeSoul/SillyTavernLauncher-For-Termux")
+        else:
+            print(f"✅ 当前已是最新版本: v{result['current_version']}")
+
+        return self.update_available
+
 def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
@@ -1374,11 +1516,22 @@ def main():
         else:
             print("请指定autostart操作: enable 或 disable")
     elif args.command == "update":
-        if args.subcommand:
-            launcher.update_component(args.subcommand)
+        if args.subcommand == "dev":
+            # 开发版更新模式
+            print("✨ 开发版更新模式已启用")
+            print("   此模式允许更新到包含 alpha、beta、rc、dev 等标识的版本")
+            print()
+            launcher.update_interactive(allow_dev=True)
+        elif args.subcommand:
+            # 正常更新指定组件
+            if args.subcommand == "stl":
+                # 更新启动器，默认不允许开发版
+                launcher.update_launcher(restart_after=True, allow_dev=False)
+            else:
+                launcher.update_component(args.subcommand)
         else:
-            # 交互式更新选择
-            launcher.update_interactive()
+            # 交互式更新选择（默认不允许开发版）
+            launcher.update_interactive(allow_dev=False)
     elif args.command == "menu":
         launcher.show_menu()
     elif args.command == "set-mirror":
