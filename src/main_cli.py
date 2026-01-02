@@ -916,11 +916,12 @@ class SillyTavernCliLauncher:
             print("8. 设置 GitHub 镜像")
             print("9. 数据同步(测试中)")
             print("10. 版本管理")
+            print("11. SillyTavern 配置")
             print("0. 退出")
             print("="*50)
 
             try:
-                choice = input("请选择操作 [0-10]: ").strip()
+                choice = input("请选择操作 [0-11]: ").strip()
 
                 if choice == "1":
                     self.install_sillytavern()
@@ -951,11 +952,13 @@ class SillyTavernCliLauncher:
                     self.show_sync_menu()
                 elif choice == "10":
                     self.show_version_menu()
+                elif choice == "11":
+                    self.show_st_config_menu()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-10 之间的数字")
+                    print("无效选择，请输入 0-11 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
@@ -993,6 +996,106 @@ class SillyTavernCliLauncher:
             return
         else:
             print("无效选择")
+
+    def show_st_config_menu(self):
+        """显示SillyTavern配置菜单"""
+        while True:
+            print("\n" + "="*50)
+            print("SillyTavern 配置管理")
+            print("="*50)
+
+            # 显示当前配置
+            print(f"当前配置:")
+            print(f"  端口: {self.stCfg.port}")
+            print(f"  局域网监听: {'启用' if self.stCfg.listen else '禁用'}")
+
+            print("\n选项:")
+            print("1. 修改端口")
+            print("2. 启用局域网监听")
+            print("3. 禁用局域网监听")
+            print("4. 查看详细配置")
+            print("0. 返回主菜单")
+            print("="*50)
+
+            try:
+                choice = input("请选择操作 [0-4]: ").strip()
+
+                if choice == "1":
+                    # 修改端口
+                    try:
+                        new_port = input(f"请输入新端口 (当前: {self.stCfg.port}): ").strip()
+                        if new_port:
+                            port_num = int(new_port)
+                            if 1 <= port_num <= 65535:
+                                self.stCfg.port = port_num
+                                self.stCfg.save_config()
+                                print(f"✓ 端口已设置为: {port_num}")
+                                print("  重新启动SillyTavern后生效")
+                            else:
+                                print("✗ 错误: 端口号必须在 1-65535 范围内")
+                        else:
+                            print("取消修改")
+                    except ValueError:
+                        print("✗ 错误: 请输入有效的端口号")
+
+                elif choice == "2":
+                    # 启用局域网监听
+                    if not self.stCfg.listen:
+                        self.stCfg.listen = True
+                        self.stCfg.save_config()
+                        print("✓ 局域网监听已启用")
+                        print("  重新启动SillyTavern后生效")
+
+                        # 询问是否创建白名单
+                        create_whitelist = input("\n是否创建默认白名单文件? (Y/n): ").strip()
+                        if create_whitelist.lower() != 'n':
+                            self.stCfg.create_whitelist()
+                            print("✓ 白名单文件已创建")
+                            print("  白名单位置: SillyTavern/whitelist.txt")
+                    else:
+                        print("局域网监听已经是启用状态")
+
+                elif choice == "3":
+                    # 禁用局域网监听
+                    if self.stCfg.listen:
+                        self.stCfg.listen = False
+                        self.stCfg.save_config()
+                        print("✓ 局域网监听已禁用")
+                        print("  重新启动SillyTavern后生效")
+                    else:
+                        print("局域网监听已经是禁用状态")
+
+                elif choice == "4":
+                    # 查看详细配置
+                    print("\n" + "="*50)
+                    print("SillyTavern 详细配置")
+                    print("="*50)
+                    print(f"配置文件: {self.stCfg.config_path}")
+                    print(f"端口: {self.stCfg.port}")
+                    print(f"局域网监听: {'启用' if self.stCfg.listen else '禁用'}")
+                    print(f"白名单文件: {self.stCfg.whitelist_path}")
+                    print(f"白名单存在: {'是' if os.path.exists(self.stCfg.whitelist_path) else '否'}")
+
+                    if self.stCfg.listen:
+                        print("\n访问地址:")
+                        print(f"  本地访问: http://localhost:{self.stCfg.port}")
+                        print(f"  局域网访问: http://<本机IP>:{self.stCfg.port}")
+                    else:
+                        print("\n访问地址:")
+                        print(f"  本地访问: http://localhost:{self.stCfg.port}")
+
+                    print("="*50)
+
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-4 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n收到退出信号，返回主菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
 
     def show_version_info(self):
         """显示当前版本信息"""
@@ -1204,7 +1307,7 @@ def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync", "version"
+        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1216,6 +1319,9 @@ def main():
     parser.add_argument("--no-backup", action='store_true', help="同步时不备份现有数据")
     parser.add_argument("--commit", help="指定版本commit")
     parser.add_argument("--version-str", help="指定版本号")
+    parser.add_argument("--st-port", type=int, help="设置SillyTavern端口")
+    parser.add_argument("--enable-listen", action='store_true', help="启用局域网监听")
+    parser.add_argument("--disable-listen", action='store_true', help="禁用局域网监听")
 
     args = parser.parse_args()
 
@@ -1408,6 +1514,67 @@ def main():
             print("  st version list")
             print("  st version switch --commit abc1234")
             print("  st version switch --version-str 1.5.0")
+    elif args.command == "st-config":
+        if args.subcommand == "info":
+            # 显示配置信息
+            print("\n" + "="*50)
+            print("SillyTavern 配置信息")
+            print("="*50)
+            print(f"配置文件: {launcher.stCfg.config_path}")
+            print(f"端口: {launcher.stCfg.port}")
+            print(f"局域网监听: {'启用' if launcher.stCfg.listen else '禁用'}")
+            print(f"白名单文件: {launcher.stCfg.whitelist_path}")
+            print(f"白名单存在: {'是' if os.path.exists(launcher.stCfg.whitelist_path) else '否'}")
+
+            if launcher.stCfg.listen:
+                print("\n访问地址:")
+                print(f"  本地访问: http://localhost:{launcher.stCfg.port}")
+                print(f"  局域网访问: http://<本机IP>:{launcher.stCfg.port}")
+            else:
+                print("\n访问地址:")
+                print(f"  本地访问: http://localhost:{launcher.stCfg.port}")
+
+            print("="*50)
+        elif args.subcommand == "port":
+            if args.st_port:
+                if 1 <= args.st_port <= 65535:
+                    launcher.stCfg.port = args.st_port
+                    launcher.stCfg.save_config()
+                    print(f"✓ 端口已设置为: {args.st_port}")
+                    print("  重新启动SillyTavern后生效")
+                else:
+                    print("✗ 错误: 端口号必须在 1-65535 范围内")
+            else:
+                print("请提供端口号，例如: st st-config port --st-port 8000")
+        elif args.subcommand == "listen":
+            if args.enable_listen:
+                launcher.stCfg.listen = True
+                launcher.stCfg.save_config()
+                print("✓ 局域网监听已启用")
+                print("  重新启动SillyTavern后生效")
+            elif args.disable_listen:
+                launcher.stCfg.listen = False
+                launcher.stCfg.save_config()
+                print("✓ 局域网监听已禁用")
+                print("  重新启动SillyTavern后生效")
+            else:
+                print("请使用 --enable-listen 或 --disable-listen 参数")
+                print("例如: st st-config listen --enable-listen")
+        elif args.subcommand == "menu":
+            launcher.show_st_config_menu()
+        else:
+            print("可用的SillyTavern配置子命令:")
+            print("  st st-config info                    - 查看配置信息")
+            print("  st st-config port --st-port <port>   - 设置端口")
+            print("  st st-config listen --enable-listen   - 启用局域网监听")
+            print("  st st-config listen --disable-listen  - 禁用局域网监听")
+            print("  st st-config menu                    - 进入配置菜单")
+            print("")
+            print("示例:")
+            print("  st st-config info")
+            print("  st st-config port --st-port 8000")
+            print("  st st-config listen --enable-listen")
+            print("  st st-config listen --disable-listen")
 
 if __name__ == "__main__":
     main()

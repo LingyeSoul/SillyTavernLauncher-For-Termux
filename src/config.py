@@ -15,7 +15,6 @@ class ConfigManager:
         else:
             self.config_path = config_path
         self.default_config = {
-                "theme": "dark",
                 "first_run": True,
                 "github": {
                     "mirror": "github"
