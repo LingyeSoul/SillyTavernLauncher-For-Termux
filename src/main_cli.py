@@ -11,6 +11,7 @@ from stconfig import stcfg
 from st_version_manager import STVersionManager
 from git_utils import checkout_st_version, check_git_status, get_current_commit
 from update_checker import UpdateChecker
+from st_migrator import STMigrator
 from version import version as current_version
 
 class SillyTavernCliLauncher:
@@ -26,6 +27,7 @@ class SillyTavernCliLauncher:
 
         self.stCfg = stcfg()
         self.version_manager = STVersionManager()
+        self.migrator = STMigrator()
 
         # 初始化更新检查器
         self.launcher_version = current_version
@@ -976,11 +978,12 @@ class SillyTavernCliLauncher:
             print("9. 数据同步(测试中)")
             print("10. 版本管理")
             print("11. SillyTavern 配置")
+            print("12. 迁移其他 SillyTavern 安装")
             print("0. 退出")
             print("="*50)
 
             try:
-                choice = input("请选择操作 [0-11]: ").strip()
+                choice = input("请选择操作 [0-12]: ").strip()
 
                 if choice == "1":
                     self.install_sillytavern()
@@ -1013,11 +1016,13 @@ class SillyTavernCliLauncher:
                     self.show_version_menu()
                 elif choice == "11":
                     self.show_st_config_menu()
+                elif choice == "12":
+                    self.show_migrate_menu()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-11 之间的数字")
+                    print("无效选择，请输入 0-12 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
@@ -1255,6 +1260,140 @@ class SillyTavernCliLauncher:
                 break
             except Exception as e:
                 print(f"发生错误: {e}")
+
+    def show_migrate_menu(self):
+        """显示迁移功能菜单"""
+        while True:
+            print("\n" + "="*50)
+            print("迁移其他 SillyTavern 安装")
+            print("="*50)
+            print("1. 扫描并迁移其他安装")
+            print("2. 手动输入路径迁移")
+            print("0. 返回主菜单")
+            print("="*50)
+
+            try:
+                choice = input("请选择操作 [0-2]: ").strip()
+
+                if choice == "1":
+                    # 扫描并迁移
+                    self.migrate_interactive()
+                elif choice == "2":
+                    # 手动输入路径
+                    source_path = input("请输入源 SillyTavern 安装路径: ").strip()
+                    if source_path:
+                        source_path = os.path.expanduser(source_path)
+                        self.migrate_from_path(source_path)
+                    else:
+                        print("路径不能为空")
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-2 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n收到退出信号，返回主菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
+
+    def migrate_interactive(self):
+        """交互式迁移流程"""
+        try:
+            success = self.migrator.interactive_migrate()
+            if success:
+                print("\n✓ 迁移成功！")
+                input("\n按 Enter 返回菜单...")
+        except Exception as e:
+            print(f"\n✗ 迁移失败: {e}")
+            input("\n按 Enter 返回菜单...")
+
+    def migrate_from_path(self, source_path: str, mode: str = "move"):
+        """
+        从指定路径迁移
+
+        Args:
+            source_path: 源安装路径
+            mode: 迁移模式 (move/copy_data/copy_config/copy_all)
+        """
+        try:
+            # 验证源路径
+            source_install = self.migrator.validate_installation(source_path)
+
+            if not source_install.is_valid:
+                print(f"\n✗ 无效的 SillyTavern 安装: {source_path}")
+                print("  请确保该目录包含 package.json 文件")
+                input("\n按 Enter 返回菜单...")
+                return
+
+            # 显示源安装信息
+            print(f"\n检测到源安装：")
+            print(f"  路径: {source_install.path}")
+            print(f"  版本: {source_install.version}")
+            print(f"  大小: {source_install.size / (1024 * 1024):.1f} MB")
+            print(f"  类型: {'Git 仓库' if source_install.has_git else '手动安装'}")
+
+            # 询问迁移模式
+            if mode not in ["move", "copy_data", "copy_config", "copy_all"]:
+                print(f"\n选择迁移模式：")
+                print("1. 移动整个安装（推荐）")
+                print("2. 只复制用户数据（data目录）")
+                print("3. 只复制配置文件（config.yaml）")
+                print("4. 复制整个安装（保留源文件）")
+                print("0. 取消")
+
+                mode_map = {
+                    "1": "move",
+                    "2": "copy_data",
+                    "3": "copy_config",
+                    "4": "copy_all"
+                }
+
+                choice = input("请选择 [0-4]: ").strip()
+                if choice == "0":
+                    print("取消迁移")
+                    return
+                elif choice in mode_map:
+                    mode = mode_map[choice]
+                else:
+                    print("无效选择")
+                    return
+
+            # 确认迁移
+            print(f"\n目标位置: {self.migrator.target_path}")
+            if mode == "move":
+                print(f"⚠️  警告：移动操作将从源位置删除文件")
+
+            confirm = input(f"\n确认从 {source_path} 迁移到 {self.migrator.target_path}？(y/N): ").strip()
+            if confirm.lower() != 'y':
+                print("取消迁移")
+                return
+
+            # 执行迁移
+            def confirm_callback(prompt: str) -> bool:
+                """确认回调"""
+                response = input(f"{prompt} (Y/n): ").strip()
+                return response.lower() != 'n'
+
+            target_exists = os.path.exists(self.migrator.target_path)
+            success = self.migrator.migrate_installation(
+                source=source_install,
+                target_path=self.migrator.target_path,
+                mode=mode,
+                backup=target_exists,
+                confirm_callback=confirm_callback
+            )
+
+            if success:
+                print("\n✓ 迁移成功！")
+            else:
+                print("\n✗ 迁移失败")
+
+            input("\n按 Enter 返回菜单...")
+
+        except Exception as e:
+            print(f"\n✗ 迁移过程中出错: {e}")
+            input("\n按 Enter 返回菜单...")
 
     def show_version_info(self):
         """显示当前版本信息"""
@@ -1510,7 +1649,7 @@ def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config"
+        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config", "migrate"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1525,6 +1664,9 @@ def main():
     parser.add_argument("--st-port", type=int, help="设置SillyTavern端口")
     parser.add_argument("--enable-listen", action='store_true', help="启用局域网监听")
     parser.add_argument("--disable-listen", action='store_true', help="禁用局域网监听")
+    parser.add_argument("--source-path", help="迁移源 SillyTavern 安装路径")
+    parser.add_argument("--mode", choices=['move', 'copy_data', 'copy_config', 'copy_all'],
+                       help="迁移模式")
 
     args = parser.parse_args()
 
@@ -1578,11 +1720,45 @@ def main():
             print("请指定autostart操作: enable 或 disable")
     elif args.command == "update":
         if args.subcommand == "dev":
-            # 开发版更新模式
-            print("✨ 开发版更新模式已启用")
-            print("   此模式允许更新到包含 alpha、beta、rc、dev 等标识的版本")
-            print()
-            launcher.update_interactive(allow_dev=True)
+            # 开发版更新模式菜单
+            print("\n" + "="*50)
+            print("开发版更新管理")
+            print("="*50)
+            print("1. 强制更新到最新 git 仓库（开发版）")
+            print("2. 切换回稳定版")
+            print("0. 取消")
+            print("="*50)
+
+            choice = input("请选择操作 [0-2]: ").strip()
+
+            if choice == "1":
+                # 强制更新到开发版
+                print("\n✨ 开发版更新模式已启用")
+                print("   此模式允许更新到包含 alpha、beta、rc、dev 等标识的版本")
+                print("   并且无视版本号，直接拉取最新代码")
+                print()
+                launcher.update_launcher(restart_after=True, allow_dev=True)
+            elif choice == "2":
+                # 切换回稳定版
+                print("\n🔄 切换回稳定版模式")
+                print("   将检查并更新到最新的稳定版本")
+                print()
+                # 检查当前是否是开发版
+                current_version = launcher.launcher_version
+                is_dev = launcher.update_checker.is_dev_version(current_version)
+
+                if is_dev:
+                    print(f"⚠️ 当前版本: v{current_version} (开发版)")
+                    print("📥 正在为您切换到稳定版...")
+                    launcher.update_launcher(restart_after=True, allow_dev=False)
+                else:
+                    print(f"✅ 当前版本: v{current_version} (已是稳定版)")
+                    print("正在检查是否有更新的稳定版本...")
+                    launcher.update_launcher(restart_after=True, allow_dev=False)
+            elif choice == "0":
+                print("取消操作")
+            else:
+                print("无效选择")
         elif args.subcommand:
             # 正常更新指定组件
             if args.subcommand == "stl":
@@ -1789,6 +1965,54 @@ def main():
             print("  st st-config port --st-port 8000")
             print("  st st-config listen --enable-listen")
             print("  st st-config listen --disable-listen")
+    elif args.command == "migrate":
+        if args.subcommand == "scan":
+            # 扫描并交互式迁移
+            launcher.migrate_interactive()
+        elif args.subcommand == "from":
+            # 从指定路径迁移
+            if args.source_path:
+                source_path = os.path.expanduser(args.source_path)
+                mode = args.mode or "move"
+                launcher.migrate_from_path(source_path, mode)
+            else:
+                print("请提供源路径，例如: st migrate from --source-path ~/SillyTavern")
+                print("")
+                print("可用参数:")
+                print("  --source-path <path>   - 源 SillyTavern 安装路径（必需）")
+                print("  --mode <mode>          - 迁移模式: move, copy_data, copy_config, copy_all")
+                print("")
+                print("迁移模式:")
+                print("  move                   - 移动整个安装（推荐，默认）")
+                print("  copy_data              - 只复制用户数据（data目录）")
+                print("  copy_config            - 只复制配置文件（config.yaml）")
+                print("  copy_all               - 复制整个安装（保留源文件）")
+                print("")
+                print("示例:")
+                print("  st migrate from --source-path ~/SillyTavern")
+                print("  st migrate from --source-path ~/SillyTavern --mode move")
+                print("  st migrate from --source-path ~/SillyTavern --mode copy_data")
+        elif args.subcommand == "menu":
+            launcher.show_migrate_menu()
+        else:
+            print("可用的迁移子命令:")
+            print("  st migrate scan              - 扫描并交互式迁移")
+            print("  st migrate from --source-path <path>  - 从指定路径迁移")
+            print("  st migrate menu              - 进入迁移菜单")
+            print("")
+            print("迁移模式参数:")
+            print("  --mode <mode>                - 迁移模式: move, copy_data, copy_config, copy_all")
+            print("")
+            print("迁移模式说明:")
+            print("  move                   - 移动整个安装（推荐）")
+            print("  copy_data              - 只复制用户数据")
+            print("  copy_config            - 只复制配置文件")
+            print("  copy_all               - 复制整个安装")
+            print("")
+            print("示例:")
+            print("  st migrate scan")
+            print("  st migrate from --source-path ~/SillyTavern --mode move")
+            print("  st migrate from --source-path ~/SillyTavern --mode copy_data")
 
 if __name__ == "__main__":
     main()

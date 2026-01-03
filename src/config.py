@@ -24,6 +24,12 @@ class ConfigManager:
                     "enabled": False,
                     "port": 9999,
                     "host": "0.0.0.0",
+                },
+                "migration": {
+                    "last_migration_time": None,
+                    "last_source_path": None,
+                    "backup_enabled": True,
+                    "preferred_mode": "move"
                 }
                 }
         self.config = self.load_config()
