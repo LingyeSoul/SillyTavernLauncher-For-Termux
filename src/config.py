@@ -30,7 +30,9 @@ class ConfigManager:
                     "last_source_path": None,
                     "backup_enabled": True,
                     "preferred_mode": "move"
-                }
+                },
+                "agreement_accepted": False,  # 用户是否已同意使用协议
+                "agreement_version": ""  # 协议版本
                 }
         self.config = self.load_config()
         

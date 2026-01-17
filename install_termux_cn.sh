@@ -16,7 +16,7 @@ fi
 
 # 更新包管理器 (使用清华镜像源)
 echo "正在配置清华镜像源..."
-sed -i 's@^\(deb.*stable main\)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/termux-packages-24 stable main@' $PREFIX/etc/apt/sources.list
+sed -i 's@^\(deb.*stable main\)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main stable main@' $PREFIX/etc/apt/sources.list
 
 echo "正在更新包管理器..."
 pkg update -y
@@ -118,9 +118,9 @@ cd "$HOME/SillytavernLauncher"
 source venv/bin/activate
 python src/main_cli.py set-mirror --mirror gh-proxy.com
 
-# 自动安装并启动SillyTavern
-echo "正在自动安装并启动 SillyTavern..."
-python src/main_cli.py launch
+# 打开启动器菜单
+echo "正在打开启动器菜单..."
+python src/main_cli.py menu
 
 echo ""
 echo "现在可以使用以下命令:"

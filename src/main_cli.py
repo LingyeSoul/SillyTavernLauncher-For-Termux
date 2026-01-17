@@ -15,12 +15,22 @@ from st_migrator import STMigrator
 from version import version as current_version
 
 class SillyTavernCliLauncher:
+    # EULA 协议版本
+    EULA_VERSION = "2025年1月17日"
+    EULA_FILE = "agreement.txt"
+
     def __init__(self):
         self.config_manager = ConfigManager()
         self.config = self.config_manager.config
         self.process = None
         self.running = False
         self.sync_server = None
+
+        # 检查 EULA 协议（在系统检查之前）
+        if not self.check_eula():
+            # 用户不同意协议，退出程序
+            print("\n感谢您的关注。如需使用本启动器，请同意协议条款。")
+            sys.exit(0)
 
         # 检查系统环境
         self.check_system_env()
@@ -57,6 +67,127 @@ class SillyTavernCliLauncher:
             
         print("系统环境依赖检查通过")
         return True
+
+    def check_eula(self):
+        """
+        检查 EULA 协议是否需要显示
+
+        Returns:
+            bool: True 表示协议已同意或无需显示，False 表示用户不同意并退出
+        """
+        # 获取当前配置的协议版本和同意状态（使用PC版字段名）
+        current_eula_version = self.config_manager.get("agreement_version", "")
+        eula_accepted = self.config_manager.get("agreement_accepted", False)
+
+        # 检查版本是否匹配
+        if current_eula_version == self.EULA_VERSION and eula_accepted:
+            # 协议版本匹配且已同意，无需显示
+            return True
+
+        # 协议版本不匹配或未同意，需要显示协议
+        return self.show_eula()
+
+    def show_eula(self):
+        """
+        显示 EULA 协议并要求用户同意
+
+        Returns:
+            bool: True 表示用户同意，False 表示用户不同意
+        """
+        # 读取协议文件
+        eula_path = os.path.join(os.getcwd(), self.EULA_FILE)
+
+        if not os.path.exists(eula_path):
+            print(f"警告: 协议文件 {self.EULA_FILE} 不存在")
+            # 如果协议文件不存在，使用内置的简化协议
+            eula_text = """SillyTavernLauncher 免责声明与合规使用协议
+版本: 1.0.0
+
+欢迎使用 SillyTavernLauncher。使用本工具前请仔细阅读以下条款：
+
+1. 本启动器仅为 SillyTavern 的启动管理工具
+2. 不对用户使用 SillyTavern 产生的任何内容承担法律责任
+3. 用户须遵守相关法律法规，禁止用于非法用途
+4. 日志数据仅用于技术支持，完全存储在本地
+
+完整协议内容请查看项目文档。
+
+您下载、安装或使用本启动器，即视为您已充分理解并同意接受本协议全部内容的约束。
+"""
+        else:
+            try:
+                with open(eula_path, 'r', encoding='utf-8') as f:
+                    eula_text = f.read()
+            except Exception as e:
+                print(f"警告: 读取协议文件失败: {e}")
+                return False
+
+        # 显示协议
+        print("\n" + "="*70)
+        print(" "*15 + "SillyTavernLauncher 用户协议")
+        print("="*70)
+        print()
+        print(eula_text)
+        print()
+        print("="*70)
+        print()
+
+        # 60秒倒计时
+        countdown_seconds = 60
+        start_time = time.time()
+
+        print(f"请仔细阅读以上协议内容。")
+        print(f"您需要在等待 {countdown_seconds} 秒后才能同意协议。")
+        print()
+
+        # 禁用输入的标志
+        can_accept = False
+
+        # 倒计时线程
+        def countdown_timer():
+            nonlocal can_accept
+            remaining = countdown_seconds
+            while remaining > 0:
+                print(f"\r剩余时间: {remaining} 秒  ", end='', flush=True)
+                time.sleep(1)
+                remaining -= 1
+            can_accept = True
+            print(f"\r剩余时间: 0 秒  ", end='', flush=True)
+            print()
+            print("✓ 您现在可以同意协议了")
+
+        # 启动倒计时线程
+        timer_thread = threading.Thread(target=countdown_timer, daemon=True)
+        timer_thread.start()
+
+        # 等待用户输入
+        while True:
+            try:
+                user_input = input("\n输入 'agree' 同意协议，或 'disagree' 不同意: ").strip().lower()
+
+                if user_input == "disagree":
+                    print("\n您不同意协议。")
+                    return False
+                elif user_input == "agree":
+                    if can_accept:
+                        # 用户同意协议，保存到配置（使用PC版字段名）
+                        self.config_manager.set("agreement_version", self.EULA_VERSION)
+                        self.config_manager.set("agreement_accepted", True)
+                        self.config_manager.save_config()
+
+                        print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
+                        print()
+                        return True
+                    else:
+                        remaining = countdown_seconds - int(time.time() - start_time)
+                        if remaining > 0:
+                            print(f"\n⚠ 请等待 {remaining} 秒后再同意协议。")
+                else:
+                    print("无效输入，请输入 'agree' 或 'disagree'")
+
+            except KeyboardInterrupt:
+                print("\n\n检测到中断，正在退出...")
+                return False
 
     def is_command_available(self, cmd):
         """检查命令是否可用"""

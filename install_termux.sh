@@ -100,11 +100,11 @@ echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
 
-# 自动启动 SillyTavern
-echo "正在自动启动 SillyTavern..."
+# 打开启动器菜单
+echo "正在打开启动器菜单..."
 cd "$ST_LAUNCHER_DIR"
 source venv/bin/activate
-python src/main_cli.py launch
+python src/main_cli.py menu
 
 echo ""
 echo "现在可以使用以下命令:"
