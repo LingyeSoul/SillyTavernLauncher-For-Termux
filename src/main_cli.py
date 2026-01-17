@@ -131,6 +131,9 @@ class SillyTavernCliLauncher:
         print(f"请仔细阅读以上协议内容。")
         print()
 
+        # 确保所有输出都已刷新
+        sys.stdout.flush()
+
         # 清空输入缓冲区
         import sys
         try:
@@ -141,45 +144,39 @@ class SillyTavernCliLauncher:
         except:
             pass
 
-        # 等待用户输入
-        while True:
-            try:
-                print("输入 Y 同意协议，或 N 不同意，然后按 Enter: ", end='', flush=True)
-                user_input = sys.stdin.readline()
+        # 等待用户输入（仅一次）
+        try:
+            sys.stdout.write("输入 Y 同意协议：")
+            sys.stdout.flush()
+            user_input = sys.stdin.readline()
 
-                # 清理输入：移除所有不可见字符和控制字符
-                cleaned_input = ''.join(char for char in user_input if char.isprintable())
-                cleaned_input = cleaned_input.strip()
+            # 清理输入：移除所有不可见字符和控制字符
+            cleaned_input = ''.join(char for char in user_input if char.isprintable())
+            cleaned_input = cleaned_input.strip()
 
-                # 如果清理后为空，提示重新输入
-                if not cleaned_input:
-                    print("无效输入（空），请输入 Y 或 N")
-                    continue
-
-                # 取第一个字符并转大写
+            # 取第一个字符并转大写
+            if cleaned_input:
                 first_char = cleaned_input[0].upper()
+            else:
+                first_char = ""
 
-                if first_char == "N":
-                    print("\n您不同意协议。")
-                    return False
-                elif first_char == "Y":
-                    # 用户同意协议，保存到配置（使用PC版字段名）
-                    self.config_manager.set("agreement_version", self.EULA_VERSION)
-                    self.config_manager.set("agreement_accepted", True)
-                    self.config_manager.save_config()
+            if first_char == "Y":
+                # 用户同意协议，保存到配置（使用PC版字段名）
+                self.config_manager.set("agreement_version", self.EULA_VERSION)
+                self.config_manager.set("agreement_accepted", True)
+                self.config_manager.save_config()
 
-                    print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
-                    print()
-                    return True
-                else:
-                    print(f"无效输入（首字符: {first_char}），请输入 Y 或 N")
-
-            except KeyboardInterrupt:
-                print("\n\n检测到中断，正在退出...")
+                print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
+                print()
+                return True
+            else:
+                # 其他任何输入（包括 N、空输入、无效输入）都退出
+                print("\n您未同意协议。启动器将退出。")
                 return False
-            except EOFError:
-                print("\n\n检测到输入结束，正在退出...")
-                return False
+
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n启动器将退出。")
+            return False
 
     def is_command_available(self, cmd):
         """检查命令是否可用"""
