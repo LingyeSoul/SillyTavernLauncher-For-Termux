@@ -118,10 +118,7 @@ echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
 
-cd "$ST_LAUNCHER_DIR"
-source venv/bin/activate
-
-echo ""
+echo "========================================="
 echo "现在可以使用以下命令:"
 echo "  st             (进入菜单界面)"
 echo "  st menu        (进入菜单界面)"
@@ -132,3 +129,9 @@ echo ""
 echo "或者直接运行:"
 echo "  ./start.sh --help"
 echo "========================================="
+
+# 打开启动器菜单
+echo "正在打开启动器菜单..."
+cd "$ST_LAUNCHER_DIR"
+source venv/bin/activate
+python src/main_cli.py menu
