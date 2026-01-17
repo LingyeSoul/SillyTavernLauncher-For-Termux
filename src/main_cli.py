@@ -135,7 +135,6 @@ class SillyTavernCliLauncher:
         sys.stdout.flush()
 
         # 清空输入缓冲区
-        import sys
         try:
             # 尝试读取并丢弃缓冲区中的任何现有数据
             import select
@@ -232,9 +231,9 @@ class SillyTavernCliLauncher:
         if not self.check_system_env():
             print("环境检查失败，无法继续安装")
             return
-            
+
         st_dir = os.path.join(os.getcwd(), "SillyTavern")
-        
+
         # 如果目录已存在，询问是否重新安装
         if os.path.exists(st_dir):
             choice = input("SillyTavern 目录已存在，是否重新安装？(y/N): ")
@@ -244,7 +243,42 @@ class SillyTavernCliLauncher:
             else:
                 print("删除现有目录...")
                 shutil.rmtree(st_dir)
-        
+
+        # 询问是否设置GitHub镜像（如果未设置或使用默认值）
+        mirror = self.config_manager.get("github.mirror", "github")
+        if mirror == "github":
+            print("\n检测到您正在使用 GitHub 官方源")
+            print("如果您在中国大陆，建议使用镜像源以获得更快的下载速度")
+            choice = input("是否设置 GitHub 镜像？(Y/n): ").strip()
+            if choice.lower() != 'n':
+                print("\n可选镜像源：")
+                print("1. gh-proxy.org")
+                print("2. ghfile.geekertao.top")
+                print("3. gh.dpik.top")
+                print("4. github.dpik.top")
+                print("5. github.acmsz.top")
+                print("6. git.yylx.win")
+                print("0. 不设置（使用官方源）")
+
+                mirror_choice = input("\n请选择镜像源 [1-6, 0-不设置]: ").strip()
+
+                mirror_map = {
+                    "1": "gh-proxy.org",
+                    "2": "ghfile.geekertao.top",
+                    "3": "gh.dpik.top",
+                    "4": "github.dpik.top",
+                    "5": "github.acmsz.top",
+                    "6": "git.yylx.win"
+                }
+
+                if mirror_choice in mirror_map:
+                    selected_mirror = mirror_map[mirror_choice]
+                    print(f"\n正在设置 GitHub 镜像为 {selected_mirror}...")
+                    self.set_github_mirror(selected_mirror)
+                    mirror = selected_mirror
+                else:
+                    print("\n将使用 GitHub 官方源")
+
         try:
             # 获取镜像配置
             mirror = self.config_manager.get("github.mirror", "github")

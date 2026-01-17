@@ -112,16 +112,6 @@ echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
 
-# 自动设置GitHub镜像为gh-proxy.com
-echo "正在设置GitHub镜像为gh-proxy.com..."
-cd "$HOME/SillytavernLauncher"
-source venv/bin/activate
-python src/main_cli.py set-mirror --mirror gh-proxy.com
-
-# 打开启动器菜单
-echo "正在打开启动器菜单..."
-python src/main_cli.py menu
-
 echo ""
 echo "现在可以使用以下命令:"
 echo "  st             (进入菜单界面)"
