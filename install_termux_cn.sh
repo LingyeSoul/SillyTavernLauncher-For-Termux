@@ -17,6 +17,7 @@ fi
 # 更新包管理器 (使用清华镜像源)
 echo "正在配置清华镜像源..."
 sed -i 's@^\(deb.*stable main\)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main stable main@' $PREFIX/etc/apt/sources.list
+apt update
 
 echo "正在更新包管理器..."
 pkg update -y
