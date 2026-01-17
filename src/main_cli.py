@@ -4,7 +4,6 @@ import subprocess
 import shutil
 import sys
 import threading
-import time
 import socket
 from config import ConfigManager
 from stconfig import stcfg
@@ -132,61 +131,39 @@ class SillyTavernCliLauncher:
         print("="*70)
         print()
 
-        # 60秒倒计时
-        countdown_seconds = 60
-        start_time = time.time()
-
         print(f"请仔细阅读以上协议内容。")
-        print(f"您需要在等待 {countdown_seconds} 秒后才能同意协议。")
         print()
-
-        # 禁用输入的标志
-        can_accept = False
-
-        # 倒计时线程
-        def countdown_timer():
-            nonlocal can_accept
-            remaining = countdown_seconds
-            while remaining > 0:
-                print(f"\r剩余时间: {remaining} 秒  ", end='', flush=True)
-                time.sleep(1)
-                remaining -= 1
-            can_accept = True
-            print(f"\r剩余时间: 0 秒  ", end='', flush=True)
-            print()
-            print("✓ 您现在可以同意协议了")
-
-        # 启动倒计时线程
-        timer_thread = threading.Thread(target=countdown_timer, daemon=True)
-        timer_thread.start()
 
         # 等待用户输入
         while True:
             try:
-                user_input = input("\n输入 'agree' 同意协议，或 'disagree' 不同意: ").strip().lower()
+                user_input = input("输入 Y 同意协议，或 N 不同意: ").strip().upper()
 
-                if user_input == "disagree":
+                # 处理空输入
+                if not user_input:
+                    print("无效输入，请输入 Y 或 N")
+                    continue
+
+                if user_input == "N":
                     print("\n您不同意协议。")
                     return False
-                elif user_input == "agree":
-                    if can_accept:
-                        # 用户同意协议，保存到配置（使用PC版字段名）
-                        self.config_manager.set("agreement_version", self.EULA_VERSION)
-                        self.config_manager.set("agreement_accepted", True)
-                        self.config_manager.save_config()
+                elif user_input == "Y":
+                    # 用户同意协议，保存到配置（使用PC版字段名）
+                    self.config_manager.set("agreement_version", self.EULA_VERSION)
+                    self.config_manager.set("agreement_accepted", True)
+                    self.config_manager.save_config()
 
-                        print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
-                        print()
-                        return True
-                    else:
-                        remaining = countdown_seconds - int(time.time() - start_time)
-                        if remaining > 0:
-                            print(f"\n⚠ 请等待 {remaining} 秒后再同意协议。")
+                    print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
+                    print()
+                    return True
                 else:
-                    print("无效输入，请输入 'agree' 或 'disagree'")
+                    print("无效输入，请输入 Y 或 N")
 
             except KeyboardInterrupt:
                 print("\n\n检测到中断，正在退出...")
+                return False
+            except EOFError:
+                print("\n\n检测到输入结束，正在退出...")
                 return False
 
     def is_command_available(self, cmd):
