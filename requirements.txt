@@ -1,6 +1,9 @@
-# 核心依赖
+# Core dependencies
 ruamel.yaml
 
-# 同步服务器依赖
+# Sync server dependencies
 flask
 requests
+
+# Async HTTP client (for version checking and management)
+aiohttp
