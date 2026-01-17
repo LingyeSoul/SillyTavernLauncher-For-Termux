@@ -96,6 +96,11 @@ chmod +x st
 
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
+# 确保 .bashrc 存在
+if [ ! -f "$HOME/.bashrc" ]; then
+    touch "$HOME/.bashrc"
+fi
+
 # 先清空可能已有的相关别名
 sed -i '/alias st=/d' $HOME/.bashrc
 sed -i '/alias ST=/d' $HOME/.bashrc
