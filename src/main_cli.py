@@ -128,26 +128,41 @@ class SillyTavernCliLauncher:
         print()
         print(eula_text)
         print()
-        print("="*70)
-        print()
-
         print(f"请仔细阅读以上协议内容。")
         print()
+
+        # 清空输入缓冲区
+        import sys
+        try:
+            # 尝试读取并丢弃缓冲区中的任何现有数据
+            import select
+            while select.select([sys.stdin], [], [], 0)[0]:
+                sys.stdin.read(1)
+        except:
+            pass
 
         # 等待用户输入
         while True:
             try:
-                user_input = input("输入 Y 同意协议，或 N 不同意: ").strip().upper()
+                print("输入 Y 同意协议，或 N 不同意，然后按 Enter: ", end='', flush=True)
+                user_input = sys.stdin.readline()
 
-                # 处理空输入
-                if not user_input:
-                    print("无效输入，请输入 Y 或 N")
+                # 清理输入：移除所有不可见字符和控制字符
+                cleaned_input = ''.join(char for char in user_input if char.isprintable())
+                cleaned_input = cleaned_input.strip()
+
+                # 如果清理后为空，提示重新输入
+                if not cleaned_input:
+                    print("无效输入（空），请输入 Y 或 N")
                     continue
 
-                if user_input == "N":
+                # 取第一个字符并转大写
+                first_char = cleaned_input[0].upper()
+
+                if first_char == "N":
                     print("\n您不同意协议。")
                     return False
-                elif user_input == "Y":
+                elif first_char == "Y":
                     # 用户同意协议，保存到配置（使用PC版字段名）
                     self.config_manager.set("agreement_version", self.EULA_VERSION)
                     self.config_manager.set("agreement_accepted", True)
@@ -157,7 +172,7 @@ class SillyTavernCliLauncher:
                     print()
                     return True
                 else:
-                    print("无效输入，请输入 Y 或 N")
+                    print(f"无效输入（首字符: {first_char}），请输入 Y 或 N")
 
             except KeyboardInterrupt:
                 print("\n\n检测到中断，正在退出...")
