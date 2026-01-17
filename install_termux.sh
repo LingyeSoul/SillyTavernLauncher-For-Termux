@@ -83,11 +83,6 @@ chmod +x st
 
 # 创建桌面快捷方式或别名
 echo "正在创建别名..."
-# 确保 .bashrc 存在
-if [ ! -f "$HOME/.bashrc" ]; then
-    touch "$HOME/.bashrc"
-fi
-
 # 先清空可能已有的相关别名
 sed -i '/alias st=/d' $HOME/.bashrc
 sed -i '/alias ST=/d' $HOME/.bashrc
@@ -104,6 +99,9 @@ echo "安装完成!"
 echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
+
+cd "$ST_LAUNCHER_DIR"
+source venv/bin/activate
 
 echo ""
 echo "现在可以使用以下命令:"
