@@ -21,13 +21,13 @@ SillyTavernLauncher 仅为 SillyTavern 应用的启动管理工具（GUI 启动�
 ### 国际用户
 
 ```bash
-curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux.sh | bash
+source <(curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux.sh)
 ```
 
 ### 中国大陆用户
 
 ```bash
-curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh | bash
+source <(curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh)
 ```
 
 ## 使用方法
