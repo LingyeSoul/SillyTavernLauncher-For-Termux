@@ -99,19 +99,7 @@ class SillyTavernCliLauncher:
         if not os.path.exists(eula_path):
             print(f"警告: 协议文件 {self.EULA_FILE} 不存在")
             # 如果协议文件不存在，使用内置的简化协议
-            eula_text = """SillyTavernLauncher 免责声明与合规使用协议
-版本: 1.0.0
-
-欢迎使用 SillyTavernLauncher。使用本工具前请仔细阅读以下条款：
-
-1. 本启动器仅为 SillyTavern 的启动管理工具
-2. 不对用户使用 SillyTavern 产生的任何内容承担法律责任
-3. 用户须遵守相关法律法规，禁止用于非法用途
-4. 日志数据仅用于技术支持，完全存储在本地
-
-完整协议内容请查看项目文档。
-
-您下载、安装或使用本启动器，即视为您已充分理解并同意接受本协议全部内容的约束。
+            eula_text = """发生错误
 """
         else:
             try:
@@ -1803,7 +1791,7 @@ def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config", "migrate"
+        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config", "migrate", "eula"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1823,6 +1811,33 @@ def main():
                        help="迁移模式")
 
     args = parser.parse_args()
+
+    # 特殊处理 eula 命令，不创建 launcher 实例以避免触发 EULA 检查
+    if args.command == "eula":
+        # 显示 EULA 提示
+        print("\n" + "="*70)
+        print(" "*20 + "SillyTavernLauncher 用户协议")
+        print("="*70)
+        print()
+        print("使用本启动器前，您必须同意用户协议。")
+        print()
+        print(f"协议版本: {SillyTavernCliLauncher.EULA_VERSION}")
+        print()
+        print("协议包含以下主要内容：")
+        print("  • 本启动器仅为 SillyTavern 的启动管理工具")
+        print("  • 不对用户使用 SillyTavern 产生的任何内容承担法律责任")
+        print("  • 用户须遵守相关法律法规，禁止用于非法用途")
+        print("  • 日志数据仅用于技术支持，完全存储在本地")
+        print()
+        print("完整协议内容请查看项目文档或协议文件。")
+        print()
+        print("="*70)
+        print()
+        print("⚠️  重要提示：")
+        print("  首次启动时，启动器将显示完整协议内容并要求您明确同意。")
+        print("  如不同意，将无法使用启动器。")
+        print()
+        return
 
     launcher = SillyTavernCliLauncher()
     

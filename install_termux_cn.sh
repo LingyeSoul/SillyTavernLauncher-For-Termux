@@ -134,4 +134,4 @@ echo "========================================="
 echo "正在打开启动器菜单..."
 cd "$ST_LAUNCHER_DIR"
 source venv/bin/activate
-python src/main_cli.py menu
+python src/main_cli.py eula
