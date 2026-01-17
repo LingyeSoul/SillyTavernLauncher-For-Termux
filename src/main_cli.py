@@ -1791,7 +1791,7 @@ def main():
     parser = argparse.ArgumentParser(description="SillyTavernLauncher for Termux")
     parser.add_argument("command", nargs='?', choices=[
         "install", "start", "launch", "config",
-        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config", "migrate", "eula"
+        "autostart", "update", "menu", "set-mirror", "sync", "version", "st-config", "migrate"
     ], help="要执行的命令")
     parser.add_argument("subcommand", nargs='?', help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
@@ -1811,33 +1811,6 @@ def main():
                        help="迁移模式")
 
     args = parser.parse_args()
-
-    # 特殊处理 eula 命令，不创建 launcher 实例以避免触发 EULA 检查
-    if args.command == "eula":
-        # 显示 EULA 提示
-        print("\n" + "="*70)
-        print(" "*20 + "SillyTavernLauncher 用户协议")
-        print("="*70)
-        print()
-        print("使用本启动器前，您必须同意用户协议。")
-        print()
-        print(f"协议版本: {SillyTavernCliLauncher.EULA_VERSION}")
-        print()
-        print("协议包含以下主要内容：")
-        print("  • 本启动器仅为 SillyTavern 的启动管理工具")
-        print("  • 不对用户使用 SillyTavern 产生的任何内容承担法律责任")
-        print("  • 用户须遵守相关法律法规，禁止用于非法用途")
-        print("  • 日志数据仅用于技术支持，完全存储在本地")
-        print()
-        print("完整协议内容请查看项目文档或协议文件。")
-        print()
-        print("="*70)
-        print()
-        print("⚠️  重要提示：")
-        print("  首次启动时，启动器将显示完整协议内容并要求您明确同意。")
-        print("  如不同意，将无法使用启动器。")
-        print()
-        return
 
     launcher = SillyTavernCliLauncher()
     

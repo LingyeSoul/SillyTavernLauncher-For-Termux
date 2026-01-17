@@ -118,10 +118,6 @@ echo ""
 echo "正在自动加载环境变量..."
 source ~/.bashrc
 
-cd "$ST_LAUNCHER_DIR"
-source venv/bin/activate
-python src/main_cli.py eula
-
 echo "========================================="
 echo "现在可以使用以下命令:"
 echo "  st             (进入菜单界面)"
