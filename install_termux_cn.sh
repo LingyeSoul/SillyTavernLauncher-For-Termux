@@ -14,9 +14,9 @@ if [ ! -d "$HOME/.termux" ]; then
     exit 1
 fi
 
-# 更新包管理器 (使用清华镜像源)
-echo "正在配置清华镜像源..."
-sed -i 's@^\(deb.*stable main\)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main stable main@' $PREFIX/etc/apt/sources.list
+# 更新包管理器 (使用清华镜像源 + 阿里云镜像源)
+echo "正在配置国内镜像源 (清华为主，阿里云为辅)..."
+sed -i 's@^\(deb.*stable main\)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main stable main\ndeb https://mirrors.aliyun.com/termux/termux-packages-24 stable main@' $PREFIX/etc/apt/sources.list
 apt update
 
 echo "正在更新包管理器..."
@@ -52,14 +52,24 @@ echo "正在创建Python虚拟环境..."
 python -m venv venv
 source venv/bin/activate
 
-# 配置pip使用清华镜像源
+# 配置pip使用国内镜像源 (清华为主，其他为备选)
 echo "正在配置pip镜像源..."
 mkdir -p $HOME/.pip
 cat > $HOME/.pip/pip.conf << EOF
 [global]
 index-url = https://pypi.tuna.tsinghua.edu.cn/simple/
+extra-index-url =
+    http://mirrors.aliyun.com/pypi/simple/
+    https://mirrors.ustc.edu.cn/pypi/simple/
+    https://repo.huaweicloud.com/repository/pypi/simple/
+    https://mirrors.cloud.tencent.com/pypi/simple/
 [install]
-trusted-host = pypi.tuna.tsinghua.edu.cn
+trusted-host =
+    pypi.tuna.tsinghua.edu.cn
+    mirrors.aliyun.com
+    mirrors.ustc.edu.cn
+    repo.huaweicloud.com
+    mirrors.cloud.tencent.com
 EOF
 
 # 安装Python依赖
