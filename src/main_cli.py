@@ -437,6 +437,35 @@ class SillyTavernCliLauncher:
             except Exception as ex:
                 print(f"检查远程仓库地址时出错: {ex}")
 
+            # 检查并清理未完成的合并/rebase状态
+            git_dir = os.path.join(st_dir, ".git")
+            merge_head = os.path.join(git_dir, "MERGE_HEAD")
+            rebase_head = os.path.join(git_dir, "rebase-apply")
+            rebase_merge = os.path.join(git_dir, "rebase-merge")
+
+            if (
+                os.path.exists(merge_head)
+                or os.path.exists(rebase_head)
+                or os.path.exists(rebase_merge)
+            ):
+                print("检测到未完成的合并/rebase状态，正在清理...")
+                subprocess.run(
+                    ["git", "merge", "--abort"],
+                    cwd=st_dir,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "rebase", "--abort"],
+                    cwd=st_dir,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "reset", "--hard", "HEAD"],
+                    cwd=st_dir,
+                    capture_output=True,
+                )
+                print("已清理未完成的操作状态")
+
             # 参考PC版：使用 git checkout -B 强制切换到 release 分支
             print("切换到 release 分支...")
             checkout_result = subprocess.run(
