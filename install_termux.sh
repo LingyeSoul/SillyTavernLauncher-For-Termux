@@ -108,8 +108,6 @@ echo "  st --help      (查看帮助信息)"
 echo "  ST --help      (查看帮助信息)"
 echo "  st update-launcher (更新SillyTavernLauncher)"
 echo ""
-echo "或者直接运行:"
-echo "  ./start.sh --help"
 echo "========================================="
 
 # 退出虚拟环境
