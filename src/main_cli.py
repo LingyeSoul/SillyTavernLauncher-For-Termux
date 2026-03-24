@@ -349,15 +349,7 @@ class SillyTavernCliLauncher:
                     return
 
             # 构建启动命令
-            cmd = ["node", "server.js"]
-
-            # 如果配置了端口
-            if hasattr(self.stCfg, "port") and self.stCfg.port:
-                cmd.extend(["--port", str(self.stCfg.port)])
-
-            # 如果配置了监听所有地址
-            if hasattr(self.stCfg, "listen") and self.stCfg.listen:
-                cmd.append("--listen")
+            cmd = ["node", "--max-old-space-size=4096", "server.js"]
 
             print(f"启动命令: {' '.join(cmd)}")
             print(f"工作目录: {st_dir}")
