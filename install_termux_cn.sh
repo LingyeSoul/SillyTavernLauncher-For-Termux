@@ -73,13 +73,35 @@ mkdir -p "$ST_LAUNCHER_DIR"
 # 进入项目目录
 cd "$ST_LAUNCHER_DIR"
 
+# 配置 Git 全局镜像 (使用 git config url.*.insteadof 实现代理加速)
+echo "正在配置 Git 全局镜像..."
+# 清除现有的 GitHub 镜像配置
+git config --global --unset-all url.https://github.com/.insteadof 2>/dev/null
+
+# 根据选择的镜像源配置 Git 全局镜像
+case "$MIRROR" in
+    github)
+        # 官方源不需要额外配置
+        echo "使用官方 GitHub 源，无需配置代理"
+        ;;
+    ghproxy)
+        git config --global url.https://gh-proxy.org/https://github.com/.insteadof https://github.com/
+        echo "Git 全局镜像已配置: gh-proxy.org"
+        ;;
+    ghllkk)
+        git config --global url.https://gh.llkk.cc/https://github.com/.insteadof https://github.com/
+        echo "Git 全局镜像已配置: gh.llkk.cc"
+        ;;
+esac
+
 # 克隆项目文件 (使用配置的镜像源)
 echo "正在克隆 SillyTavernLauncher 仓库..."
 if [ -d ".git" ]; then
     echo "目录中已存在Git仓库，正在更新..."
     git pull
 else
-    git clone "$REPO_URL" .
+    # 使用官方 URL，git config 的 url.*.insteadof 会自动重写为镜像地址
+    git clone "https://github.com/${GITHUB_ORG}/${GITHUB_REPO}.git" .
     if [ $? -ne 0 ]; then
         echo "错误: 克隆仓库失败"
         exit 1
