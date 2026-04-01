@@ -8,6 +8,8 @@ import threading
 import asyncio
 from datetime import datetime
 
+from .utils import MirrorBuilder
+
 
 class STVersionManager:
     """SillyTavern版本管理器"""
@@ -15,16 +17,15 @@ class STVersionManager:
     def __init__(self):
         self.st_dir = os.path.join(os.getcwd(), "SillyTavern")
 
-        # STVersions.json的URL地址
-        self.github_url = "https://raw.githubusercontent.com/LingyeSoul/SillyTavern/refs/heads/release/STVersions.json"
-        self.gitee_url = "https://gitee.com/lingyesoul/SillyTavern/raw/release/STVersions.json"
-
     def get_versions_json_url(self, mirror="github"):
-        """根据镜像返回URL"""
-        if mirror == "github":
-            return self.github_url
-        else:
-            return self.gitee_url
+        """根据镜像返回 URL"""
+        return MirrorBuilder.build_raw_url(
+            org="LingyeSoul",
+            repo="SillyTavern",
+            branch="release",
+            path="STVersions.json",
+            mirror=mirror
+        )
 
     async def fetch_st_versions_async(self, mirror="github"):
         """异步从远程获取STVersions.json"""

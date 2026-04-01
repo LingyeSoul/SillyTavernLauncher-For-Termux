@@ -17,7 +17,8 @@ class ConfigManager:
         self.default_config = {
                 "first_run": True,
                 "github": {
-                    "mirror": "github"
+                    "mirror": "github",  # 支持: github, ghproxy, ghllkk, 或自定义域名
+                    "custom_mirror_url": ""  # 自定义镜像 URL（当 mirror 不是预设值时使用）
                 },
                 "autostart": False,
                 "sync": {

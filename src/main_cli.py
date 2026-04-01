@@ -12,6 +12,7 @@ from git_utils import checkout_st_version, check_git_status, get_current_commit
 from update_checker import UpdateChecker
 from st_migrator import STMigrator
 from version import version as current_version
+from utils import MirrorBuilder
 
 
 class SillyTavernCliLauncher:
@@ -176,11 +177,13 @@ class SillyTavernCliLauncher:
     def get_github_mirror(self):
         """获取GitHub镜像地址"""
         mirror = self.config_manager.get("github.mirror", "github")
+        mirror = MirrorBuilder.normalize_mirror(mirror)
         if mirror == "github":
             return "https://github.com"
         else:
             # 使用镜像站
-            return f"https://{mirror}/https://github.com"
+            domain = MirrorBuilder.KEY_TO_DOMAIN.get(mirror, mirror)
+            return f"https://{domain}/https://github.com"
 
     def run_command_with_output(self, cmd, cwd=None):
         """运行命令并实时输出结果"""
@@ -245,45 +248,32 @@ class SillyTavernCliLauncher:
             if choice.lower() != "n":
                 print("\n可选镜像源：")
                 print("1. gh-proxy.org")
-                print("2. ghfile.geekertao.top")
-                print("3. gh.dpik.top")
-                print("4. github.dpik.top")
-                print("5. github.acmsz.top")
-                print("6. git.yylx.win")
+                print("2. gh.llkk.cc")
                 print("0. 不设置（使用官方源）")
 
-                mirror_choice = input("\n请选择镜像源 [1-6, 0-不设置]: ").strip()
+                mirror_choice = input("\n请选择镜像源 [1-2, 0-不设置]: ").strip()
 
                 mirror_map = {
-                    "1": "gh-proxy.org",
-                    "2": "ghfile.geekertao.top",
-                    "3": "gh.dpik.top",
-                    "4": "github.dpik.top",
-                    "5": "github.acmsz.top",
-                    "6": "git.yylx.win",
+                    "1": "ghproxy",
+                    "2": "ghllkk",
                 }
 
                 if mirror_choice in mirror_map:
                     selected_mirror = mirror_map[mirror_choice]
-                    print(f"\n正在设置 GitHub 镜像为 {selected_mirror}...")
+                    display = MirrorBuilder.get_display_name(selected_mirror)
+                    print(f"\n正在设置 GitHub 镜像为 {display}...")
                     self.set_github_mirror(selected_mirror)
                     mirror = selected_mirror
+                elif mirror_choice == "0":
+                    print("\n将使用 GitHub 官方源")
                 else:
                     print("\n将使用 GitHub 官方源")
 
         try:
-            # 获取镜像配置
+            # 直接使用官方 GitHub URL，gitconfig 的 url.*.insteadof 会自动重写为镜像地址
+            repo_url = "https://github.com/SillyTavern/SillyTavern.git"
             mirror = self.config_manager.get("github.mirror", "github")
-
-            # 根据是否使用镜像决定仓库地址
-            if mirror == "github":
-                # 使用GitHub官方仓库
-                repo_url = "https://github.com/SillyTavern/SillyTavern.git"
-                print(f"正在克隆 SillyTavern 仓库 (使用官方源)...")
-            else:
-                # 使用Gitee镜像仓库
-                repo_url = "https://gitee.com/lingyesoul/SillyTavern.git"
-                print(f"正在克隆 SillyTavern 仓库 (使用Gitee镜像)...")
+            print(f"正在克隆 SillyTavern 仓库 (使用 {mirror} 镜像)...")
 
             # 克隆SillyTavern仓库
             success = self.run_command_with_output(
@@ -402,14 +392,8 @@ class SillyTavernCliLauncher:
             print("错误: SillyTavern 未安装，请先运行 install 命令")
             return
 
-        try:
-            # 检查并更新远程仓库地址
-            mirror_type = self.config_manager.get("github.mirror", "github")
-            if mirror_type == "github":
-                expected_remote = "https://github.com/SillyTavern/SillyTavern.git"
-            else:
-                expected_remote = "https://gitee.com/lingyesoul/SillyTavern.git"
-
+        # 迁移: 检查远程仓库是否仍指向 Gitee
+        if os.path.exists(os.path.join(st_dir, ".git")):
             try:
                 result = subprocess.run(
                     ["git", "remote", "get-url", "origin"],
@@ -419,15 +403,25 @@ class SillyTavernCliLauncher:
                 )
                 if result.returncode == 0:
                     current_remote = result.stdout.strip()
-                    if current_remote != expected_remote:
-                        print(f"更新远程仓库地址: {expected_remote}")
-                        subprocess.run(
-                            ["git", "remote", "set-url", "origin", expected_remote],
+                    if "gitee.com" in current_remote:
+                        print(f"检测到远程仓库仍指向 Gitee: {current_remote}")
+                        print("正在迁移到 GitHub 官方仓库...")
+                        github_url = "https://github.com/SillyTavern/SillyTavern.git"
+                        migrate_result = subprocess.run(
+                            ["git", "remote", "set-url", "origin", github_url],
                             cwd=st_dir,
                             capture_output=True,
+                            text=True,
                         )
+                        if migrate_result.returncode == 0:
+                            print("已成功将远程仓库切换到 GitHub")
+                        else:
+                            print(f"切换远程仓库失败: {migrate_result.stderr}")
             except Exception as ex:
                 print(f"检查远程仓库地址时出错: {ex}")
+
+        try:
+            # gitconfig 的 url.*.insteadof 会自动重写 GitHub URL 为镜像地址，无需手动修改 remote URL
 
             # 检查并清理未完成的合并/rebase状态
             git_dir = os.path.join(st_dir, ".git")
@@ -534,15 +528,36 @@ class SillyTavernCliLauncher:
 
     def set_github_mirror(self, mirror):
         """设置GitHub镜像"""
-        # 设置镜像配置
-        self.config_manager.set("github.mirror", mirror)
+        if not mirror or not isinstance(mirror, str):
+            print("错误: 镜像源不能为空")
+            return False
+
+        mirror = mirror.strip()
+        # 规范化为键名
+        mirror_key = MirrorBuilder.normalize_mirror(mirror)
+
+        # 验证镜像源
+        if mirror_key not in MirrorBuilder.SUPPORTED_MIRRORS:
+            # 非预设镜像，验证格式是否像有效域名
+            if not mirror.replace(".", "").replace("-", "").isalnum():
+                print(f"错误: 无效的镜像源: {mirror}")
+                valid_list = ", ".join(
+                    MirrorBuilder.KEY_TO_DOMAIN.get(m, m) for m in MirrorBuilder.SUPPORTED_MIRRORS
+                )
+                print(f"支持的镜像源: {valid_list}")
+                return False
+
+        # 设置镜像配置（存储键名）
+        self.config_manager.set("github.mirror", mirror_key)
         self.config_manager.save_config()
-        print(f"GitHub 镜像已设置为: {mirror}")
+
+        display_name = MirrorBuilder.get_display_name(mirror_key)
+        print(f"GitHub 镜像已设置为: {display_name}")
 
         # 配置Git全局设置
         try:
             # 清除现有的GitHub镜像配置
-            clear_result = subprocess.run(
+            subprocess.run(
                 [
                     "git",
                     "config",
@@ -555,9 +570,10 @@ class SillyTavernCliLauncher:
             )
 
             # 如果使用镜像且不是官方源，则配置Git全局镜像
-            if mirror != "github":
+            if mirror_key != "github":
+                domain = MirrorBuilder.KEY_TO_DOMAIN.get(mirror_key, mirror_key)
                 # 配置GitHub镜像
-                mirror_url = f"https://{mirror}/https://github.com/"
+                mirror_url = f"https://{domain}/https://github.com/"
                 subprocess.run(
                     [
                         "git",
@@ -571,58 +587,12 @@ class SillyTavernCliLauncher:
                     text=True,
                 )
                 print(f"Git全局镜像已配置: {mirror_url} -> https://github.com/")
-
-                # 如果SillyTavern已经安装，还需要切换其远程地址
-                st_dir = os.path.join(os.getcwd(), "SillyTavern")
-                if os.path.exists(st_dir) and os.path.exists(
-                    os.path.join(st_dir, ".git")
-                ):
-                    # 切换SillyTavern仓库远程地址为Gitee镜像
-                    result = subprocess.run(
-                        [
-                            "git",
-                            "remote",
-                            "set-url",
-                            "origin",
-                            "https://gitee.com/lingyesoul/SillyTavern.git",
-                        ],
-                        cwd=st_dir,
-                        capture_output=True,
-                        text=True,
-                    )
-
-                    if result.returncode == 0:
-                        print("SillyTavern仓库远程地址已切换到Gitee镜像")
-                    else:
-                        print(f"切换SillyTavern仓库远程地址失败: {result.stderr}")
-            else:
-                # 使用官方源时，如果有SillyTavern目录，尝试切换回官方地址
-                st_dir = os.path.join(os.getcwd(), "SillyTavern")
-                if os.path.exists(st_dir) and os.path.exists(
-                    os.path.join(st_dir, ".git")
-                ):
-                    result = subprocess.run(
-                        [
-                            "git",
-                            "remote",
-                            "set-url",
-                            "origin",
-                            "https://github.com/SillyTavern/SillyTavern.git",
-                        ],
-                        cwd=st_dir,
-                        capture_output=True,
-                        text=True,
-                    )
-
-                    if result.returncode == 0:
-                        print("SillyTavern仓库远程地址已切换回官方地址")
-                    else:
-                        print(f"切换SillyTavern仓库远程地址失败: {result.stderr}")
-
         except subprocess.CalledProcessError as e:
             print(f"配置Git全局镜像时出错: {e}")
         except Exception as e:
             print(f"配置Git全局镜像时发生未知错误: {e}")
+
+        return True
 
     def start_sync_server(self, port=None, host="0.0.0.0"):
         """启动数据同步服务器"""
@@ -1449,33 +1419,22 @@ class SillyTavernCliLauncher:
     def show_mirror_menu(self):
         """显示镜像设置菜单"""
         print("\nGitHub 镜像设置:")
-        print("1. github.com (官方源)")
-        print("2. gh-proxy.org")
-        print("3. ghfile.geekertao.top")
-        print("4. gh.dpik.top")
-        print("5. github.dpik.top")
-        print("6. github.acmsz.top")
-        print("7. git.yylx.win")
+        for i, item in enumerate(MirrorBuilder.MIRROR_LIST, 1):
+            print(f"{i}. {item[1]}")
         print("0. 返回上级菜单")
 
-        choice = input("请选择镜像源 [0-7]: ").strip()
+        choice = input(f"请选择镜像源 [0-{len(MirrorBuilder.MIRROR_LIST)}]: ").strip()
 
-        mirror_map = {
-            "1": "github",
-            "2": "gh-proxy.org",
-            "3": "ghfile.geekertao.top",
-            "4": "gh.dpik.top",
-            "5": "github.dpik.top",
-            "6": "github.acmsz.top",
-            "7": "git.yylx.win",
-        }
-
-        if choice in mirror_map:
-            self.set_github_mirror(mirror_map[choice])
-        elif choice == "0":
-            return
-        else:
-            print("无效选择")
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(MirrorBuilder.MIRROR_LIST):
+                mirror_key = MirrorBuilder.MIRROR_LIST[idx][0]
+                self.set_github_mirror(mirror_key)
+            elif choice != "0":
+                print("无效选择")
+        except ValueError:
+            if choice != "0":
+                print("无效选择")
 
     def show_st_config_menu(self):
         """显示SillyTavern配置菜单"""
@@ -2131,7 +2090,8 @@ def main():
         launcher.show_menu()
     elif args.command == "set-mirror":
         if args.mirror:
-            launcher.set_github_mirror(args.mirror)
+            if not launcher.set_github_mirror(args.mirror):
+                sys.exit(1)
         else:
             print("请提供镜像源参数，例如: st set-mirror --mirror gh-proxy.org")
     elif args.command == "sync":

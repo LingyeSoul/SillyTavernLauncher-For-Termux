@@ -27,7 +27,16 @@ source <(curl -s https://raw.githubusercontent.com/LingyeSoul/SillyTavernLaunche
 ### 中国大陆用户
 
 ```bash
-source <(curl -s https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/install_termux_cn.sh)
+source <(curl -s https://gh-proxy.org/https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux_cn.sh)
+```
+
+或者指定镜像源：
+```bash
+# 使用 gh-proxy.org 镜像
+source <(curl -s https://gh-proxy.org/https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux_cn.sh) ghproxy
+
+# 使用 gh.llkk.cc 镜像
+source <(curl -s https://gh-proxy.org/https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/install_termux_cn.sh) ghllkk
 ```
 
 ## 使用方法
@@ -72,14 +81,10 @@ st update stl  # 更新 SillyTavernLauncher 本身
 ### 可用的 GitHub 镜像
 
 1. github.com (官方源)
-2. gh-proxy.com
-3. ghfile.geekertao.top
-4. gh.dpik.top
-5. github.dpik.top
-6. github.acmsz.top
-7. git.yylx.win
+2. gh-proxy.org
+3. gh.llkk.cc
 
-中国大陆用户安装时会自动设置为 `gh-proxy.com` 镜像以加速下载。
+使用 `st set-mirror --mirror <mirror>` 命令切换镜像源。
 
 
 ## 许可证

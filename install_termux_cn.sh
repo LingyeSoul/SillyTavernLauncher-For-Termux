@@ -2,6 +2,12 @@
 
 # SillyTavernLauncher for Termux - 安装脚本 (中国大陆优化版)
 # 用于在Termux环境中快速安装和配置SillyTavernLauncher CLI
+#
+# 使用方法:
+#   bash install_termux_cn.sh           # 使用默认 gh-proxy.org 镜像
+#   bash install_termux_cn.sh github     # 使用官方 GitHub
+#   bash install_termux_cn.sh ghproxy    # 使用 gh-proxy.org
+#   bash install_termux_cn.sh ghllkk     # 使用 gh.llkk.cc
 
 echo "========================================="
 echo "SillyTavernLauncher for Termux 安装脚本 (中国大陆优化版)"
@@ -13,6 +19,39 @@ if [ ! -d "$HOME/.termux" ]; then
     echo "请在Android设备上的Termux应用中运行此脚本"
     exit 1
 fi
+
+# 解析镜像参数 (默认使用 gh-proxy.org)
+MIRROR="${1:-ghproxy}"
+
+# 配置 GitHub 镜像源 URL
+case "$MIRROR" in
+    github)
+        GITHUB_BASE="https://github.com"
+        RAW_BASE="https://raw.githubusercontent.com"
+        echo "使用官方 GitHub 源"
+        ;;
+    ghproxy)
+        GITHUB_BASE="https://gh-proxy.org/https://github.com"
+        RAW_BASE="https://gh-proxy.org/https://raw.githubusercontent.com"
+        echo "使用 gh-proxy.org 镜像"
+        ;;
+    ghllkk)
+        GITHUB_BASE="https://gh.llkk.cc/https://github.com"
+        RAW_BASE="https://gh.llkk.cc/https://raw.githubusercontent.com"
+        echo "使用 gh.llkk.cc 镜像"
+        ;;
+    *)
+        echo "错误: 未知镜像源 $MIRROR"
+        echo "支持的镜像源: github, ghproxy, ghllkk"
+        exit 1
+        ;;
+esac
+
+# GitHub 仓库信息
+GITHUB_ORG="LingyeSoul"
+GITHUB_REPO="SillyTavernLauncher-For-Termux"
+REPO_URL="${GITHUB_BASE}/${GITHUB_ORG}/${GITHUB_REPO}.git"
+INSTALL_SCRIPT_URL="${RAW_BASE}/${GITHUB_ORG}/${GITHUB_REPO}/main/install_termux_cn.sh"
 
 # 更新包管理器 (使用清华镜像源 + 阿里云镜像源)
 echo "正在配置国内镜像源 (清华为主，阿里云为辅)..."
@@ -34,13 +73,13 @@ mkdir -p "$ST_LAUNCHER_DIR"
 # 进入项目目录
 cd "$ST_LAUNCHER_DIR"
 
-# 克隆项目文件 (使用Gitee镜像)
-echo "正在克隆 SillyTavernLauncher 仓库 (Gitee镜像)..."
+# 克隆项目文件 (使用配置的镜像源)
+echo "正在克隆 SillyTavernLauncher 仓库..."
 if [ -d ".git" ]; then
     echo "目录中已存在Git仓库，正在更新..."
     git pull
 else
-    git clone https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux.git .
+    git clone "$REPO_URL" .
     if [ $? -ne 0 ]; then
         echo "错误: 克隆仓库失败"
         exit 1

@@ -7,6 +7,8 @@ import aiohttp
 import re
 import threading
 
+from .utils import MirrorBuilder
+
 
 class UpdateChecker:
     """版本更新检查器"""
@@ -17,23 +19,26 @@ class UpdateChecker:
 
         Args:
             current_version: 当前版本号
-            mirror: GitHub镜像源 ("github" 或 "gitee")
+            mirror: GitHub镜像源 ("github", "ghproxy", "mirrorgo" 等)
         """
         self.current_version = current_version
         self.mirror = mirror
 
     async def get_latest_release_version_from_raw(self) -> str:
         """
-        通过GitHub RAW链接获取最新版本号
+        通过 GitHub RAW 链接获取最新版本号
 
         Returns:
-            最新版本号，如果出错则返回None
+            最新版本号，如果出错则返回 None
         """
-        # 构建RAW URL
-        if self.mirror == "github":
-            raw_url = "https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/refs/heads/main/src/version.py"
-        else:
-            raw_url = "https://gitee.com/lingyesoul/SillyTavernLauncher-For-Termux/raw/main/src/version.py"
+        # 使用 MirrorBuilder 构建 RAW URL
+        raw_url = MirrorBuilder.build_raw_url(
+            org="LingyeSoul",
+            repo="SillyTavernLauncher-For-Termux",
+            branch="main",
+            path="src/version.py",
+            mirror=self.mirror
+        )
 
         try:
             async with aiohttp.ClientSession() as session:
