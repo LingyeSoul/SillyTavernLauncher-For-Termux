@@ -8,7 +8,7 @@ import threading
 import asyncio
 from datetime import datetime
 
-from .utils import MirrorBuilder
+from utils import MirrorBuilder
 
 
 class STVersionManager:

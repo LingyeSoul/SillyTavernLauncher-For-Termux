@@ -7,7 +7,7 @@ import aiohttp
 import re
 import threading
 
-from .utils import MirrorBuilder
+from utils import MirrorBuilder
 
 
 class UpdateChecker:
