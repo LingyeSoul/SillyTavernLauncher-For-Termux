@@ -2,6 +2,7 @@
 Termux版本的Git工具函数
 用于SillyTavern版本切换
 """
+
 import os
 import subprocess
 
@@ -32,14 +33,16 @@ def checkout_st_version(commit_hash, st_dir=None):
     try:
         # 步骤1：检查当前分支状态
         check_branch = subprocess.run(
-            'git rev-parse --abbrev-ref HEAD',
+            "git rev-parse --abbrev-ref HEAD",
             shell=True,
             capture_output=True,
             text=True,
-            cwd=st_dir
+            cwd=st_dir,
         )
 
-        current_branch = check_branch.stdout.strip() if check_branch.returncode == 0 else ""
+        current_branch = (
+            check_branch.stdout.strip() if check_branch.returncode == 0 else ""
+        )
 
         # 步骤2：如果是detached HEAD状态，先切换回release分支
         if current_branch == "HEAD":
@@ -47,49 +50,55 @@ def checkout_st_version(commit_hash, st_dir=None):
 
             # 尝试切换到release分支
             checkout_release = subprocess.run(
-                'git checkout release',
+                "git checkout release",
                 shell=True,
                 capture_output=True,
                 text=True,
-                cwd=st_dir
+                cwd=st_dir,
             )
 
             if checkout_release.returncode != 0:
                 # 如果本地没有release分支，从远程创建
                 print("本地没有release分支，从远程创建...")
                 checkout_release = subprocess.run(
-                    'git checkout -b release origin/release',
+                    "git checkout -b release origin/release",
                     shell=True,
                     capture_output=True,
                     text=True,
-                    cwd=st_dir
+                    cwd=st_dir,
                 )
 
                 if checkout_release.returncode != 0:
-                    return False, f"无法切换到release分支: {checkout_release.stderr.strip() if checkout_release.stderr else '未知错误'}"
+                    return (
+                        False,
+                        f"无法切换到release分支: {checkout_release.stderr.strip() if checkout_release.stderr else '未知错误'}",
+                    )
 
         # 步骤3：确保在release分支上（如果当前在其他分支，切换到release）
         if current_branch != "release":
             print(f"当前在 {current_branch} 分支，切换到release分支...")
 
             checkout_release = subprocess.run(
-                'git checkout release',
+                "git checkout release",
                 shell=True,
                 capture_output=True,
                 text=True,
-                cwd=st_dir
+                cwd=st_dir,
             )
 
             if checkout_release.returncode != 0:
-                return False, f"切换到release分支失败: {checkout_release.stderr.strip() if checkout_release.stderr else '未知错误'}"
+                return (
+                    False,
+                    f"切换到release分支失败: {checkout_release.stderr.strip() if checkout_release.stderr else '未知错误'}",
+                )
 
         # 步骤4：检查工作区状态
         status_result = subprocess.run(
-            'git status --porcelain',
+            "git status --porcelain",
             shell=True,
             capture_output=True,
             text=True,
-            cwd=st_dir
+            cwd=st_dir,
         )
 
         # 步骤5：如果有未提交的更改，先保存
@@ -97,55 +106,51 @@ def checkout_st_version(commit_hash, st_dir=None):
             print("检测到未提交的更改，使用stash保存...")
 
             # 过滤掉package-lock.json的更改
-            modified_lines = status_result.stdout.strip().split('\n')
+            modified_lines = status_result.stdout.strip().split("\n")
             non_package_lock_changes = [
-                line for line in modified_lines
-                if line.strip() and 'package-lock.json' not in line
+                line
+                for line in modified_lines
+                if line.strip() and "package-lock.json" not in line
             ]
 
             if non_package_lock_changes:
                 stash_cmd = f'git stash push -m "版本切换前保存{commit_hash[:7]}"'
                 stash_result = subprocess.run(
-                    stash_cmd,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    cwd=st_dir
+                    stash_cmd, shell=True, capture_output=True, text=True, cwd=st_dir
                 )
 
                 if stash_result.returncode != 0:
-                    return False, f"保存本地更改失败: {stash_result.stderr.strip() if stash_result.stderr else '未知错误'}"
+                    return (
+                        False,
+                        f"保存本地更改失败: {stash_result.stderr.strip() if stash_result.stderr else '未知错误'}",
+                    )
                 print("本地更改已暂存")
             else:
                 # 只有package-lock.json被修改，恢复它
                 subprocess.run(
-                    'git checkout -- package-lock.json',
+                    "git checkout -- package-lock.json",
                     shell=True,
                     capture_output=True,
                     text=True,
-                    cwd=st_dir
+                    cwd=st_dir,
                 )
 
         # 步骤6：使用git reset --hard切换到指定commit（保持在release分支上）
         print(f"在release分支上切换到commit {commit_hash[:7]}...")
-        reset_cmd = f'git reset --hard {commit_hash}'
+        reset_cmd = f"git reset --hard {commit_hash}"
 
         reset_result = subprocess.run(
-            reset_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=st_dir
+            reset_cmd, shell=True, capture_output=True, text=True, cwd=st_dir
         )
 
         if reset_result.returncode == 0:
             # 验证当前状态
             verify_branch = subprocess.run(
-                'git rev-parse --abbrev-ref HEAD',
+                "git rev-parse --abbrev-ref HEAD",
                 shell=True,
                 capture_output=True,
                 text=True,
-                cwd=st_dir
+                cwd=st_dir,
             )
 
             if verify_branch.returncode == 0:
@@ -158,13 +163,116 @@ def checkout_st_version(commit_hash, st_dir=None):
             else:
                 return True, f"成功切换到版本 {commit_hash[:7]}"
         else:
-            error_msg = reset_result.stderr.strip() if reset_result.stderr else "未知错误"
+            error_msg = (
+                reset_result.stderr.strip() if reset_result.stderr else "未知错误"
+            )
             return False, f"切换失败: {error_msg}"
 
     except Exception as e:
         print(f"切换过程中发生异常: {str(e)}")
         import traceback
+
         traceback.print_exc()
+        return False, f"切换过程中发生错误: {str(e)}"
+
+
+def checkout_branch_force(branch, remote=None, st_dir=None):
+    if st_dir is None:
+        st_dir = os.path.join(os.getcwd(), "SillyTavern")
+
+    if not os.path.exists(st_dir):
+        return False, "SillyTavern目录不存在"
+
+    git_dir = os.path.join(st_dir, ".git")
+    if not os.path.exists(git_dir):
+        return False, "SillyTavern目录不是Git仓库"
+
+    try:
+        remote_name = remote or "origin"
+        remote_branch = f"{remote_name}/{branch}"
+
+        fetch_result = subprocess.run(
+            ["git", "fetch", remote_name],
+            cwd=st_dir,
+            capture_output=True,
+            text=True,
+        )
+        if fetch_result.returncode != 0:
+            return False, f"fetch远程失败: {fetch_result.stderr.strip()}"
+
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=st_dir,
+            capture_output=True,
+            text=True,
+        )
+
+        has_local_changes = bool(status_result.stdout.strip())
+
+        if has_local_changes:
+            modified_lines = status_result.stdout.strip().split("\n")
+            non_package_lock_changes = [
+                line
+                for line in modified_lines
+                if line.strip() and "package-lock.json" not in line
+            ]
+
+            if not non_package_lock_changes:
+                subprocess.run(
+                    ["git", "checkout", "--", "package-lock.json"],
+                    cwd=st_dir,
+                    capture_output=True,
+                    text=True,
+                )
+                print("已自动恢复 package-lock.json 的本地更改")
+            else:
+                print("检测到未提交的本地更改，正在暂存...")
+                stash_result = subprocess.run(
+                    ["git", "stash", "push", "-m", "自动暂存: 切换分支前保存"],
+                    cwd=st_dir,
+                    capture_output=True,
+                    text=True,
+                )
+                if stash_result.returncode != 0:
+                    if "package-lock.json" in status_result.stdout:
+                        subprocess.run(
+                            ["git", "checkout", "--", "package-lock.json"],
+                            cwd=st_dir,
+                            capture_output=True,
+                            text=True,
+                        )
+                        print("已恢复 package-lock.json，继续切换分支")
+                    else:
+                        return False, f"暂存本地更改失败: {stash_result.stderr.strip()}"
+                else:
+                    print("本地更改已暂存")
+
+        print(f"切换到 {branch} 分支...")
+        checkout_result = subprocess.run(
+            ["git", "checkout", "-B", branch, remote_branch],
+            cwd=st_dir,
+            capture_output=True,
+            text=True,
+        )
+
+        if checkout_result.returncode != 0:
+            error_msg = checkout_result.stderr.strip()
+            if "not found" in error_msg.lower() or "did not match" in error_msg.lower():
+                print(f"远程分支 {remote_branch} 不存在，尝试使用本地分支...")
+                checkout_result = subprocess.run(
+                    ["git", "checkout", "-B", branch],
+                    cwd=st_dir,
+                    capture_output=True,
+                    text=True,
+                )
+
+        if checkout_result.returncode != 0:
+            return False, f"切换到 {branch} 分支失败: {checkout_result.stderr.strip()}"
+
+        print(f"成功切换到 {branch} 分支")
+        return True, f"成功切换到 {branch} 分支"
+
+    except Exception as e:
         return False, f"切换过程中发生错误: {str(e)}"
 
 
@@ -184,11 +292,11 @@ def check_git_status(st_dir=None):
     try:
         # 检查是否有未提交的更改
         result = subprocess.run(
-            'git status --porcelain',
+            "git status --porcelain",
             shell=True,
             capture_output=True,
             text=True,
-            cwd=st_dir
+            cwd=st_dir,
         )
 
         # 如果输出为空，说明工作区干净
@@ -196,22 +304,23 @@ def check_git_status(st_dir=None):
             return True, "工作区干净"
         else:
             # 检查修改的文件
-            modified_lines = result.stdout.strip().split('\n')
+            modified_lines = result.stdout.strip().split("\n")
             # 过滤掉package-lock.json的更改（这是由于使用镜像NPM源导致的）
             non_package_lock_changes = [
-                line for line in modified_lines
-                if line.strip() and 'package-lock.json' not in line
+                line
+                for line in modified_lines
+                if line.strip() and "package-lock.json" not in line
             ]
 
             if not non_package_lock_changes:
                 # 只有package-lock.json被修改，自动恢复它
                 try:
                     subprocess.run(
-                        'git checkout -- package-lock.json',
+                        "git checkout -- package-lock.json",
                         shell=True,
                         capture_output=True,
                         text=True,
-                        cwd=st_dir
+                        cwd=st_dir,
                     )
                     return True, "工作区干净（已自动恢复package-lock.json）"
                 except:
@@ -243,11 +352,7 @@ def get_current_commit(st_dir=None):
 
     try:
         result = subprocess.run(
-            'git rev-parse HEAD',
-            shell=True,
-            capture_output=True,
-            text=True,
-            cwd=st_dir
+            "git rev-parse HEAD", shell=True, capture_output=True, text=True, cwd=st_dir
         )
 
         if result.returncode == 0:

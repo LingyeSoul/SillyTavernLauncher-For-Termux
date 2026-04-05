@@ -8,7 +8,12 @@ import socket
 from config import ConfigManager
 from stconfig import stcfg
 from st_version_manager import STVersionManager
-from git_utils import checkout_st_version, check_git_status, get_current_commit
+from git_utils import (
+    checkout_st_version,
+    checkout_branch_force,
+    check_git_status,
+    get_current_commit,
+)
 from update_checker import UpdateChecker
 from st_migrator import STMigrator
 from version import version as current_version
@@ -452,50 +457,56 @@ class SillyTavernCliLauncher:
                 )
                 print("已清理未完成的操作状态")
 
-            # 参考PC版：使用 git checkout -B 强制切换到 release 分支
-            print("切换到 release 分支...")
-            checkout_result = subprocess.run(
-                ["git", "checkout", "-B", "release", "origin/release"],
-                cwd=st_dir,
-                capture_output=True,
-                text=True,
-            )
-
-            if checkout_result.returncode != 0:
-                print(f"切换到 release 分支失败: {checkout_result.stderr}")
+            success, message = checkout_branch_force("release", st_dir=st_dir)
+            if not success:
+                print(f"切换到 release 分支失败: {message}")
                 return
 
             print("成功切换到 release 分支")
 
-            # 参考PC版：使用 git pull --rebase --autostash 进行更新
             print("正在拉取最新代码...")
             success = self.run_command_with_output(
                 ["git", "pull", "--rebase", "--autostash"], cwd=st_dir
             )
 
             if not success:
-                print("Git更新失败，检查是否为 package-lock.json 冲突...")
+                print("Git更新失败，尝试自动解决冲突...")
                 try:
-                    reset_result = subprocess.run(
-                        ["git", "checkout", "--", "package-lock.json"],
+                    status_result = subprocess.run(
+                        ["git", "status", "--porcelain"],
                         cwd=st_dir,
                         capture_output=True,
                         text=True,
                     )
 
-                    if reset_result.returncode == 0:
+                    if "package-lock.json" in status_result.stdout:
+                        subprocess.run(
+                            ["git", "checkout", "--", "package-lock.json"],
+                            cwd=st_dir,
+                            capture_output=True,
+                            text=True,
+                        )
                         print("已重置 package-lock.json，重新尝试更新...")
                         success = self.run_command_with_output(
                             ["git", "pull", "--rebase", "--autostash"], cwd=st_dir
                         )
-                        if not success:
-                            print("重试更新失败")
-                            return
-                    else:
-                        print("无法解决 package-lock.json 冲突，需要手动处理")
-                        return
+
+                    if not success:
+                        print("自动解决冲突失败，使用强制更新...")
+                        subprocess.run(
+                            ["git", "rebase", "--abort"],
+                            cwd=st_dir,
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["git", "reset", "--hard", "origin/release"],
+                            cwd=st_dir,
+                            capture_output=True,
+                            text=True,
+                        )
+                        print("已强制同步到最新版本")
                 except Exception as ex:
-                    print(f"处理 package-lock.json 冲突时出错: {ex}")
+                    print(f"处理冲突时出错: {ex}")
                     return
 
             # 更新Node.js依赖
@@ -542,7 +553,8 @@ class SillyTavernCliLauncher:
             if not mirror.replace(".", "").replace("-", "").isalnum():
                 print(f"错误: 无效的镜像源: {mirror}")
                 valid_list = ", ".join(
-                    MirrorBuilder.KEY_TO_DOMAIN.get(m, m) for m in MirrorBuilder.SUPPORTED_MIRRORS
+                    MirrorBuilder.KEY_TO_DOMAIN.get(m, m)
+                    for m in MirrorBuilder.SUPPORTED_MIRRORS
                 )
                 print(f"支持的镜像源: {valid_list}")
                 return False
