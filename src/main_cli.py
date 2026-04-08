@@ -1273,11 +1273,12 @@ class SillyTavernCliLauncher:
             print("10. 版本管理")
             print("11. SillyTavern 配置")
             print("12. 迁移其他 SillyTavern 安装")
+            print("13. 一键修复 (清理依赖)")
             print("0. 退出")
             print("=" * 50)
 
             try:
-                choice = input("请选择操作 [0-12]: ").strip()
+                choice = input("请选择操作 [0-13]: ").strip()
 
                 if choice == "1":
                     self.install_sillytavern()
@@ -1312,11 +1313,13 @@ class SillyTavernCliLauncher:
                     self.show_st_config_menu()
                 elif choice == "12":
                     self.show_migrate_menu()
+                elif choice == "13":
+                    self.fix_node_modules()
                 elif choice == "0":
                     print("感谢使用 SillyTavernLauncher!")
                     break
                 else:
-                    print("无效选择，请输入 0-12 之间的数字")
+                    print("无效选择，请输入 0-13 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n\n收到退出信号，正在退出...")
@@ -1904,6 +1907,59 @@ class SillyTavernCliLauncher:
                 break
             except Exception as e:
                 print(f"发生错误: {e}")
+
+    def fix_node_modules(self):
+        """一键修复：删除node_modules并清理npm缓存"""
+        st_dir = os.path.join(os.getcwd(), "SillyTavern")
+        if not os.path.exists(st_dir):
+            print("错误: SillyTavern 未安装，请先运行安装")
+            return
+
+        node_modules = os.path.join(st_dir, "node_modules")
+        if not os.path.exists(node_modules):
+            print("node_modules 目录不存在，无需清理")
+        else:
+            print("正在删除 node_modules...")
+            try:
+                shutil.rmtree(node_modules)
+                print("✓ node_modules 已删除")
+            except Exception as e:
+                print(f"✗ 删除 node_modules 失败: {e}")
+                return
+
+        print("正在清理 npm 缓存...")
+        success = self.run_command_with_output(
+            ["npm", "cache", "clean", "--force"], cwd=st_dir
+        )
+        if success:
+            print("✓ npm 缓存已清理")
+        else:
+            print("✗ npm 缓存清理失败")
+            return
+
+        print("正在重新安装依赖...")
+        if self.config_manager.get("github.mirror", "github") != "github":
+            success = self.run_command_with_output(
+                [
+                    "npm",
+                    "install",
+                    "--no-audit",
+                    "--no-fund",
+                    "--registry=https://registry.npmmirror.com",
+                ],
+                cwd=st_dir,
+            )
+        else:
+            success = self.run_command_with_output(
+                ["npm", "install", "--no-audit", "--no-fund"], cwd=st_dir
+            )
+
+        if success:
+            print("✓ 依赖安装完成")
+        else:
+            print("✗ 依赖安装失败")
+
+        print("\n一键修复完成!")
 
     def check_launcher_update(self, allow_dev=False):
         """
