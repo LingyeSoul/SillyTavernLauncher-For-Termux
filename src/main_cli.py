@@ -77,46 +77,52 @@ class SillyTavernCliLauncher:
         return True
 
     def check_eula(self):
-        """
-        检查 EULA 协议是否需要显示
+        """检查 EULA 协议是否需要显示"""
+        from features.agreement.fetcher import AgreementFetcher
 
-        Returns:
-            bool: True 表示协议已同意或无需显示，False 表示用户不同意并退出
-        """
-        # 获取当前配置的协议版本和同意状态（使用PC版字段名）
         current_eula_version = self.config_manager.get("agreement_version", "")
         eula_accepted = self.config_manager.get("agreement_accepted", False)
 
-        # 检查版本是否匹配
-        if current_eula_version == self.EULA_VERSION and eula_accepted:
-            # 协议版本匹配且已同意，无需显示
-            return True
+        # Try online agreement first
+        try:
+            fetcher = AgreementFetcher()
+            online_date, online_content, from_cache = fetcher.get_agreement()
+            # Online success - use remote date as version
+            if eula_accepted and current_eula_version == online_date:
+                return True
+            return self.show_eula(content_text=online_content, version_date=online_date, source="online")
+        except Exception:
+            # Network failure - fall back to local agreement.txt
+            print("提示: 无法在线获取协议，使用本地协议文件")
+            if eula_accepted and current_eula_version == self.EULA_VERSION:
+                return True
+            return self.show_eula(source="local")
 
-        # 协议版本不匹配或未同意，需要显示协议
-        return self.show_eula()
-
-    def show_eula(self):
+    def show_eula(self, content_text=None, version_date=None, source="local"):
         """
         显示 EULA 协议并要求用户同意
 
         Returns:
             bool: True 表示用户同意，False 表示用户不同意
         """
-        # 读取协议文件
-        eula_path = os.path.join(os.getcwd(), self.EULA_FILE)
+        # 读取协议文件（仅当未提供在线内容时）
+        if content_text is None:
+            eula_path = os.path.join(os.getcwd(), self.EULA_FILE)
 
-        if not os.path.exists(eula_path):
-            print(f"警告: 协议文件 {self.EULA_FILE} 不存在")
-            # 如果协议文件不存在，使用内置的简化协议
-            eula_text = """发生错误
+            if not os.path.exists(eula_path):
+                print(f"警告: 协议文件 {self.EULA_FILE} 不存在")
+                # 如果协议文件不存在，使用内置的简化协议
+                eula_text = """发生错误
 """
+            else:
+                try:
+                    with open(eula_path, "r", encoding="utf-8") as f:
+                        eula_text = f.read()
+                except Exception as e:
+                    print(f"警告: 读取协议文件失败: {e}")
+                    return False
         else:
-            try:
-                with open(eula_path, "r", encoding="utf-8") as f:
-                    eula_text = f.read()
-            except Exception as e:
-                print(f"警告: 读取协议文件失败: {e}")
-                return False
+            eula_text = content_text
 
         # 显示协议
         print("\n" + "=" * 70)
@@ -159,8 +165,20 @@ class SillyTavernCliLauncher:
 
             if first_char == "Y":
                 # 用户同意协议，保存到配置（使用PC版字段名）
-                self.config_manager.set("agreement_version", self.EULA_VERSION)
+                saved_version = version_date or self.EULA_VERSION
+                self.config_manager.set("agreement_version", saved_version)
                 self.config_manager.set("agreement_accepted", True)
+
+                # 记录同意历史
+                from datetime import datetime
+                history = self.config_manager.get("agreement_history", [])
+                history.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "version": saved_version,
+                    "source": source
+                })
+                self.config_manager.set("agreement_history", history)
+
                 self.config_manager.save_config()
 
                 print("\n✓ 感谢您同意协议。现在可以使用启动器了。")
@@ -174,6 +192,86 @@ class SillyTavernCliLauncher:
         except (KeyboardInterrupt, EOFError):
             print("\n\n启动器将退出。")
             return False
+
+    def _show_install_confirm(self):
+        """安装前合规确认 + 年龄验证"""
+        print()
+        print("=" * 70)
+        print()
+        print(" " * 27 + "⚠ 安装确认")
+        print()
+        print("您即将下载第三方开源软件 SillyTavern。该软件可能支持 AI 角色扮演、")
+        print("情感互动等功能，使用这些功能需遵守《人工智能拟人化互动服务管理暂行办法》。")
+        print("本启动器不建议未满18周岁用户独立使用。未满14周岁用户须在监护人明确")
+        print("知情并同意的前提下使用。")
+        print()
+        print("请确认: 我已确认本人已年满18周岁，或作为未满18周岁用户已取得监护人同意")
+
+        sys.stdout.write("输入 Y 确认继续: ")
+        sys.stdout.flush()
+
+        try:
+            user_input = sys.stdin.readline()
+            cleaned = "".join(c for c in user_input if c.isprintable()).strip()
+            if cleaned and cleaned[0].upper() == "Y":
+                return True
+            return False
+        except (KeyboardInterrupt, EOFError):
+            return False
+
+    def _show_first_start_confirm(self):
+        """首次启动合规确认"""
+        print()
+        print("=" * 70)
+        print()
+        print(" " * 27 + "⚠ 启动确认")
+        print()
+        print("您即将启动 SillyTavern，该软件可能包含 AI 角色扮演、情感互动等功能，")
+        print("使用这些功能需遵守《人工智能拟人化互动服务管理暂行办法》。")
+        print("本启动器不建议未满18周岁用户独立使用。未满14周岁用户须在监护人明确")
+        print("知情并同意的前提下使用。")
+        print()
+        print("请确认: 我已确认本人已年满18周岁，或作为未满18周岁用户已取得监护人同意")
+
+        sys.stdout.write("输入 Y 确认启动: ")
+        sys.stdout.flush()
+
+        try:
+            user_input = sys.stdin.readline()
+            cleaned = "".join(c for c in user_input if c.isprintable()).strip()
+            if cleaned and cleaned[0].upper() == "Y":
+                return True
+            return False
+        except (KeyboardInterrupt, EOFError):
+            return False
+
+    def _record_action(self, action_type, details=None):
+        """记录用户行为到配置文件"""
+        from datetime import datetime
+        record = {
+            "action": action_type,
+            "timestamp": datetime.now().isoformat(),
+        }
+        if details:
+            record.update(details)
+
+        try:
+            if action_type in ("install", "install_complete"):
+                downloads = self.config_manager.get("downloads", [])
+                downloads.append(record)
+                self.config_manager.set("downloads", downloads)
+            elif action_type == "agreement_accepted":
+                history = self.config_manager.get("agreement_history", [])
+                history.append(record)
+                self.config_manager.set("agreement_history", history)
+            elif action_type == "first_start_confirmed":
+                history = self.config_manager.get("agreement_history", [])
+                history.append(record)
+                self.config_manager.set("agreement_history", history)
+
+            self.config_manager.save_config()
+        except Exception:
+            pass
 
     def is_command_available(self, cmd):
         """检查命令是否可用"""
@@ -231,6 +329,13 @@ class SillyTavernCliLauncher:
         if not self.check_system_env():
             print("环境检查失败，无法继续安装")
             return
+
+        # 安装前合规确认
+        if not self._show_install_confirm():
+            print("取消安装")
+            return
+
+        self._record_action("install", {"status": "started"})
 
         st_dir = os.path.join(os.getcwd(), "SillyTavern")
 
@@ -320,6 +425,7 @@ class SillyTavernCliLauncher:
                 return
 
             print("SillyTavern 安装完成!")
+            self._record_action("install_complete", {"status": "completed"})
 
         except Exception as e:
             print(f"安装过程中出现未知错误: {e}")
@@ -342,6 +448,15 @@ class SillyTavernCliLauncher:
                 else:
                     print("取消启动")
                     return
+
+            # 首次启动确认
+            if not self.config_manager.get("has_started_st", False):
+                if not self._show_first_start_confirm():
+                    print("用户取消启动")
+                    return
+                self.config_manager.set("has_started_st", True)
+                self.config_manager.save_config()
+                self._record_action("first_start_confirmed")
 
             # 构建启动命令
             cmd = ["node", "--max-old-space-size=4096", "server.js"]

@@ -6,3 +6,8 @@ venv/
 config.json
 /backup
 /src/utils/__pycache__
+/.sisyphus
+/tests
+/src/features/__pycache__
+/src/features/agreement/__pycache__
+agreement_cache.json

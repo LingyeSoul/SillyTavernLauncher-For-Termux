@@ -32,8 +32,11 @@ class ConfigManager:
                     "backup_enabled": True,
                     "preferred_mode": "move"
                 },
-                "agreement_accepted": False,  # 用户是否已同意使用协议
-                "agreement_version": ""  # 协议版本
+                "agreement_accepted": False,
+                "agreement_version": "",
+                "downloads": [],
+                "has_started_st": False,
+                "agreement_history": []
                 }
         self.config = self.load_config()
         
