@@ -1849,11 +1849,8 @@ class SillyTavernCliLauncher:
         """列出可用版本"""
         print("\n正在获取版本列表...")
 
-        # 获取镜像配置
-        mirror = self.config_manager.get("github.mirror", "github")
-
         # 获取版本列表
-        result = self.version_manager.run_fetch_async(mirror=mirror)
+        result = self.version_manager.fetch_st_versions()
 
         if not result["success"]:
             print(f"获取版本列表失败: {result['error']}")
@@ -1861,6 +1858,10 @@ class SillyTavernCliLauncher:
 
         versions = result["versions"]
         latest = result["latest"]
+
+        if not versions:
+            print("本地没有版本标签，请先选择「更新版本标签」获取远程标签")
+            return
 
         print(f"\n最新版本: v{latest}")
         print("\n可用版本:")
@@ -1882,8 +1883,7 @@ class SillyTavernCliLauncher:
 
         # 获取版本列表
         print("\n正在获取可用版本列表...")
-        mirror = self.config_manager.get("github.mirror", "github")
-        result = self.version_manager.run_fetch_async(mirror=mirror)
+        result = self.version_manager.fetch_st_versions()
 
         if not result["success"]:
             print(f"获取版本列表失败: {result['error']}")
@@ -1951,6 +1951,7 @@ class SillyTavernCliLauncher:
                     install_deps = input("\n是否重新安装依赖? (推荐) (Y/n): ").strip()
                     if install_deps.lower() != "n":
                         print("\n正在安装依赖...")
+                        mirror = self.config_manager.get("github.mirror", "github")
                         if mirror != "github":
                             success = self.run_command_with_output(
                                 [
@@ -1982,6 +1983,21 @@ class SillyTavernCliLauncher:
         except ValueError:
             print("请输入有效的数字")
 
+    def update_version_tags(self):
+        """更新远程版本标签"""
+        print("\n正在更新远程版本标签...")
+
+        result = self.version_manager.update_remote_tags()
+
+        if result["success"]:
+            print(f"✓ {result['message']}")
+            print("\n更新完成，是否查看版本列表?")
+            view = input("输入 y 查看可用版本 (y/N): ").strip()
+            if view.lower() == "y":
+                self.list_available_versions()
+        else:
+            print(f"✗ 更新失败: {result.get('message', '未知错误')}")
+
     def show_version_menu(self):
         """显示版本管理菜单"""
         while True:
@@ -2000,11 +2016,12 @@ class SillyTavernCliLauncher:
             print("1. 查看当前版本信息")
             print("2. 列出可用版本")
             print("3. 切换版本")
+            print("4. 更新版本标签")
             print("0. 返回主菜单")
             print("=" * 50)
 
             try:
-                choice = input("请选择操作 [0-3]: ").strip()
+                choice = input("请选择操作 [0-4]: ").strip()
 
                 if choice == "1":
                     self.show_version_info()
@@ -2012,10 +2029,12 @@ class SillyTavernCliLauncher:
                     self.list_available_versions()
                 elif choice == "3":
                     self.switch_version_interactive()
+                elif choice == "4":
+                    self.update_version_tags()
                 elif choice == "0":
                     break
                 else:
-                    print("无效选择，请输入 0-3 之间的数字")
+                    print("无效选择，请输入 0-4 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n收到退出信号，返回主菜单...")
@@ -2349,8 +2368,7 @@ def main():
                 # 根据版本号查找对应的commit
                 print(f"查找版本 v{args.version_str}...")
 
-                mirror = launcher.config_manager.get("github.mirror", "github")
-                result = launcher.version_manager.run_fetch_async(mirror=mirror)
+                result = launcher.version_manager.fetch_st_versions()
 
                 if not result["success"]:
                     print(f"获取版本列表失败: {result['error']}")

@@ -365,6 +365,180 @@ def get_current_commit(st_dir=None):
         return False, None, f"获取commit时出错: {str(e)}"
 
 
+def get_st_tags(st_dir=None):
+    """
+    获取SillyTavern的所有Git tag列表（用于版本管理）
+
+    Args:
+        st_dir (str): SillyTavern目录路径，默认为当前目录下的SillyTavern文件夹
+
+    Returns:
+        tuple: (success: bool, tags_data: dict or None, message: str)
+        tags_data格式:
+        {
+            'versions': {
+                '1.16.0': {'commit': 'abc123...', 'date': '2026-02-14T17:46:49+02:00', 'tag_name': '1.16.0'},
+                ...
+            },
+            'latest': '1.16.0'
+        }
+    """
+    import re
+
+    if st_dir is None:
+        st_dir = os.path.join(os.getcwd(), "SillyTavern")
+
+    # 检查目录是否存在
+    if not os.path.exists(st_dir):
+        return False, None, "SillyTavern目录不存在"
+
+    # 检查是否是Git仓库
+    git_dir = os.path.join(st_dir, ".git")
+    if not os.path.exists(git_dir):
+        return False, None, "SillyTavern目录不是Git仓库"
+
+    try:
+        # 步骤1: 获取本地tag列表
+        list_tags_result = subprocess.run(
+            "git tag -l",
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=st_dir,
+        )
+
+        if list_tags_result.returncode != 0:
+            return False, None, f"获取tag列表失败: {list_tags_result.stderr.strip()}"
+
+        all_tags = [tag.strip() for tag in list_tags_result.stdout.strip().split('\n') if tag.strip()]
+
+        # 步骤2: 过滤只保留语义化版本格式的tag (v{x.y.z} 或 {x.y.z})，且版本 >= 1.13.0
+        version_tag_pattern = re.compile(r'^[vV]?(\d+)\.(\d+)\.(\d+)(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$')
+
+        def normalize_version(tag_name):
+            """规范化版本字符串，去除v前缀"""
+            if tag_name.startswith('v') or tag_name.startswith('V'):
+                return tag_name[1:]
+            return tag_name
+
+        def version_gte_1_13_0(version_str):
+            """检查版本是否 >= 1.13.0"""
+            try:
+                parts = version_str.split('.')
+                major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+                # 1.13.0 = (1, 13, 0)
+                if major > 1:
+                    return True
+                if major == 1:
+                    if minor > 13:
+                        return True
+                    if minor == 13:
+                        return patch >= 0
+                    return False
+                return False
+            except (ValueError, IndexError):
+                return False
+
+        versions = {}
+        valid_tags = []
+
+        for tag in all_tags:
+            version_str = normalize_version(tag)
+            if version_tag_pattern.match(version_str) and version_gte_1_13_0(version_str):
+                valid_tags.append((tag, version_str))
+
+        # 步骤3: 获取每个有效tag的commit和日期信息
+        for tag_name, version_str in valid_tags:
+            # 使用 git show 获取 tag 的 commit hash 和日期
+            # %H = 完整commit hash, %aI = ISO 8601 格式的作者日期
+            show_result = subprocess.run(
+                f'git show {tag_name} --format="%H|%aI" -s',
+                shell=True,
+                capture_output=True,
+                text=True,
+                cwd=st_dir,
+            )
+
+            if show_result.returncode == 0:
+                output = show_result.stdout.strip()
+                # 解析输出（去掉首尾引号）
+                output = output.strip("'\"")
+                parts = output.split('|')
+                if len(parts) == 2:
+                    commit_hash = parts[0]
+                    date_str = parts[1]
+                    versions[version_str] = {
+                        'commit': commit_hash,
+                        'date': date_str,
+                        'tag_name': tag_name  # 保存原始tag名称
+                    }
+
+        # 步骤4: 确定最新版本（使用语义化版本排序）
+        try:
+            from packaging import version as pkg_version
+            sorted_versions = sorted(
+                versions.keys(),
+                key=lambda v: pkg_version.parse(v),
+                reverse=True
+            )
+            latest_version = sorted_versions[0] if sorted_versions else ''
+        except ImportError:
+            # 如果没有 packaging 模块，使用简单字符串排序
+            sorted_versions = sorted(versions.keys(), reverse=True)
+            latest_version = sorted_versions[0] if sorted_versions else ''
+
+        tags_data = {
+            'versions': versions,
+            'latest': latest_version
+        }
+
+        print(f"成功获取 {len(versions)} 个版本标签")
+        return True, tags_data, f"成功获取 {len(versions)} 个版本"
+
+    except Exception as e:
+        return False, None, f"获取tag列表时出错: {str(e)}"
+
+
+def fetch_remote_tags(st_dir=None):
+    """
+    从远程仓库获取所有tags
+
+    Args:
+        st_dir (str): SillyTavern目录路径，默认为当前目录下的SillyTavern文件夹
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    if st_dir is None:
+        st_dir = os.path.join(os.getcwd(), "SillyTavern")
+
+    # 检查目录是否存在
+    if not os.path.exists(st_dir):
+        return False, "SillyTavern目录不存在"
+
+    # 检查是否是Git仓库
+    git_dir = os.path.join(st_dir, ".git")
+    if not os.path.exists(git_dir):
+        return False, "SillyTavern目录不是Git仓库"
+
+    try:
+        result = subprocess.run(
+            "git fetch origin --tags",
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=st_dir,
+        )
+
+        if result.returncode == 0:
+            return True, "成功从远程获取tags"
+        else:
+            return False, f"获取远程tags失败: {result.stderr}"
+
+    except Exception as e:
+        return False, f"获取远程tags时出错: {str(e)}"
+
+
 # 使用示例
 if __name__ == "__main__":
     # 示例1：切换到指定版本

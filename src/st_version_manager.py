@@ -4,11 +4,9 @@ SillyTavern版本管理器
 """
 import json
 import os
-import threading
-import asyncio
 from datetime import datetime
 
-from utils import MirrorBuilder
+from git_utils import get_st_tags, fetch_remote_tags
 
 
 class STVersionManager:
@@ -17,44 +15,25 @@ class STVersionManager:
     def __init__(self):
         self.st_dir = os.path.join(os.getcwd(), "SillyTavern")
 
-    def get_versions_json_url(self, mirror="github"):
-        """根据镜像返回 URL"""
-        return MirrorBuilder.build_raw_url(
-            org="LingyeSoul",
-            repo="SillyTavern",
-            branch="release",
-            path="STVersions.json",
-            mirror=mirror
-        )
-
-    async def fetch_st_versions_async(self, mirror="github"):
-        """异步从远程获取STVersions.json"""
+    def fetch_st_versions(self):
+        """从本地Git仓库获取SillyTavern版本列表"""
+        from git_utils import get_st_tags
         try:
-            import aiohttp
-
-            url = self.get_versions_json_url(mirror)
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url,
-                    headers={'User-Agent': 'SillyTavernLauncher/1.0'},
-                    timeout=aiohttp.ClientTimeout(total=15)
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        return {
-                            'success': True,
-                            'versions': data.get('versions', {}),
-                            'latest': data.get('latest', ''),
-                            'error': None
-                        }
-                    else:
-                        return {
-                            'success': False,
-                            'versions': {},
-                            'latest': '',
-                            'error': f'HTTP {response.status}'
-                        }
+            success, tags_data, message = get_st_tags(self.st_dir)
+            if success:
+                return {
+                    'success': True,
+                    'versions': tags_data.get('versions', {}),
+                    'latest': tags_data.get('latest', ''),
+                    'error': None
+                }
+            else:
+                return {
+                    'success': False,
+                    'versions': {},
+                    'latest': '',
+                    'error': message
+                }
         except Exception as e:
             return {
                 'success': False,
@@ -63,36 +42,14 @@ class STVersionManager:
                 'error': f'获取版本列表失败: {str(e)}'
             }
 
-    def run_fetch_async(self, mirror="github"):
-        """同步包装器，用于在线程中运行异步获取版本列表"""
-        def run_loop():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(self.fetch_st_versions_async(mirror))
-            finally:
-                loop.close()
-
-        result = {}
-
-        def worker():
-            nonlocal result
-            result = run_loop()
-
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        thread.join(timeout=20)
-
-        if thread.is_alive():
-            return {
-                'success': False,
-                'versions': {},
-                'latest': '',
-                'error': '获取版本列表超时'
-            }
-
-        return result
+    def update_remote_tags(self):
+        """从远程仓库获取最新tags"""
+        from git_utils import fetch_remote_tags
+        try:
+            success, message = fetch_remote_tags(self.st_dir)
+            return {'success': success, 'message': message}
+        except Exception as e:
+            return {'success': False, 'message': f'获取远程tags失败: {str(e)}'}
 
     def get_current_version(self):
         """从package.json获取当前版本"""
@@ -152,7 +109,7 @@ if __name__ == "__main__":
     manager = STVersionManager()
 
     print("=== 测试获取版本列表 ===")
-    result = manager.run_fetch_async(mirror="github")
+    result = manager.fetch_st_versions()
 
     if result['success']:
         print(f"最新版本: v{result['latest']}")
