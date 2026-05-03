@@ -1,64 +1,280 @@
 import os
+import re
+from typing import Optional
 from ruamel.yaml import YAML
+from network import get_network_manager
 
 
 class stcfg:
     def __init__(self):
         self.base_dir = os.path.join(os.getcwd(), "SillyTavern")
         self.config_path = os.path.join(self.base_dir, "config.yaml")
-        self.whitelist_path = os.path.join(self.base_dir, "whitelist.txt")
+        self.whitelist_txt_path = os.path.join(self.base_dir, "whitelist.txt")
         self.listen = False
         self.port = 8000
-        
-        # 初始化YAML处理对象
+
+        # Host 白名单
+        self.host_whitelist_enabled = False
+        self.host_whitelist_scan = True
+        self.host_whitelist_hosts = ["localhost", "127.0.0.1", "[::1]"]
+
+        # IP 白名单
+        self.whitelist_mode = True
+        self.enable_forwarded_whitelist = True
+        self.whitelist_ips = ["::1", "127.0.0.1"]
+        self.unified_whitelist = False
+
         self.yaml = YAML()
         self.yaml.preserve_quotes = True
-            
+
         self.config_data = {}
         self.load_config()
 
     def load_config(self):
         try:
-            with open(self.config_path, 'r', encoding='utf-8') as file:
+            with open(self.config_path, "r", encoding="utf-8") as file:
                 self.config_data = self.yaml.load(file) or {}
-                    
-                # 保留原始配置内容
-                self.listen = self.config_data.get('listen', False)
-                self.port = self.config_data.get('port', 8000)
-                # 仅加载 listen 和 port 配置
-                pass
+
+                self.listen = self.config_data.get("listen", False)
+                self.port = self.config_data.get("port", 8000)
+
+                host_whitelist = self.config_data.get("hostWhitelist", {})
+                self.host_whitelist_enabled = host_whitelist.get("enabled", False)
+                self.host_whitelist_scan = host_whitelist.get("scan", True)
+                self.host_whitelist_hosts = host_whitelist.get(
+                    "hosts", ["localhost", "127.0.0.1", "[::1]"]
+                )
+
+                self.whitelist_mode = self.config_data.get("whitelistMode", True)
+                self.enable_forwarded_whitelist = self.config_data.get(
+                    "enableForwardedWhitelist", True
+                )
+                self.whitelist_ips = self.config_data.get(
+                    "whitelist", ["::1", "127.0.0.1"]
+                )
+                self.unified_whitelist = self.config_data.get("unifiedWhitelist", False)
+
+            self._migrate_whitelist_from_txt()
+
         except FileNotFoundError:
-            # 配置文件不存在，使用默认值
             pass
         except Exception as e:
             print(f"加载配置文件时出错: {e}")
 
-
     def save_config(self):
         try:
-            # 确保目录存在
-            os.makedirs(self.base_dir, exist_ok=True)
-            
-            # 更新配置数据
-            self.config_data['listen'] = self.listen
-            self.config_data['port'] = self.port
-            
-            # 保存到文件
-            with open(self.config_path, 'w', encoding='utf-8') as file:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+
+            self.config_data["listen"] = self.listen
+            self.config_data["port"] = self.port
+
+            if "hostWhitelist" not in self.config_data:
+                self.config_data["hostWhitelist"] = {}
+            self.config_data["hostWhitelist"]["enabled"] = self.host_whitelist_enabled
+            self.config_data["hostWhitelist"]["scan"] = self.host_whitelist_scan
+            self.config_data["hostWhitelist"]["hosts"] = self.host_whitelist_hosts
+
+            self.config_data["whitelistMode"] = self.whitelist_mode
+            self.config_data["enableForwardedWhitelist"] = self.enable_forwarded_whitelist
+            self.config_data["whitelist"] = self.whitelist_ips
+            self.config_data["unifiedWhitelist"] = self.unified_whitelist
+
+            with open(self.config_path, "w", encoding="utf-8") as file:
                 self.yaml.dump(self.config_data, file)
-                
+
         except Exception as e:
             print(f"保存配置文件时出错: {e}")
 
-    def create_whitelist(self):
-        if not os.path.exists(self.whitelist_path):
-            try:
-                # 确保目标目录存在
-                os.makedirs(os.path.dirname(self.whitelist_path), exist_ok=True)
-                with open(self.whitelist_path, 'w', encoding='utf-8') as f:
-                    f.write("192.168.*.*\n127.0.0.1\n")
-            except Exception as e:
-                print(f"白名单文件创建失败: {str(e)}")
+    def _get_subnet_from_ip(self, ip: str) -> Optional[str]:
+        """从IP地址提取网段通配符，如 192.168.1.42 -> 192.168.1.*"""
+        try:
+            if ":" in ip:
+                parts = ip.split(":")
+                if len(parts) >= 2:
+                    return f"{parts[0]}:{parts[1]}::*"
+                return None
+            parts = ip.split(".")
+            if len(parts) == 4:
+                return f"{parts[0]}.{parts[1]}.{parts[2]}.*"
+            return None
+        except Exception:
+            return None
+
+    def _migrate_whitelist_from_txt(self) -> bool:
+        """从旧版 whitelist.txt 迁移到 config.yaml"""
+        if not os.path.exists(self.whitelist_txt_path):
+            return False
+
+        try:
+            with open(self.whitelist_txt_path, "r", encoding="utf-8") as f:
+                txt_content = f.read()
+
+            migrated_ips = []
+            for line in txt_content.split("\n"):
+                line = line.strip()
+                if line and line not in migrated_ips:
+                    migrated_ips.append(line)
+
+            current_ips = set(self.whitelist_ips)
+            new_ips = [ip for ip in migrated_ips if ip not in current_ips]
+
+            if new_ips:
+                self.whitelist_ips = migrated_ips + [
+                    ip for ip in self.whitelist_ips if ip not in migrated_ips
+                ]
+                self.save_config()
+                print(f"已从 whitelist.txt 迁移 {len(new_ips)} 个 IP 到 config.yaml")
+                try:
+                    os.remove(self.whitelist_txt_path)
+                    print("已删除旧的 whitelist.txt 文件")
+                except Exception as e:
+                    print(f"删除 whitelist.txt 失败: {e}")
+
+            return True
+
+        except Exception as e:
+            print(f"迁移 whitelist.txt 失败: {e}")
+            return False
+
+    def _check_and_update_whitelist_subnet(self):
+        """检查并更新白名单中的网段，确保与当前网络匹配"""
+        local_ip = get_network_manager().get_local_ip()
+        if not local_ip:
+            print("无法获取本地IP，跳过白名单网段检查")
+            return False
+
+        current_subnet = self._get_subnet_from_ip(local_ip)
+        if not current_subnet:
+            print(f"无法从IP {local_ip} 提取网段")
+            return False
+
+        is_ipv6 = ":" in local_ip
+        broader_subnet = None
+        if not is_ipv6:
+            ip_parts = local_ip.split(".")
+            broader_subnet = f"{ip_parts[0]}.{ip_parts[1]}.*.*"
+
+        subnet_exists = any(
+            ip == current_subnet or (broader_subnet and ip == broader_subnet)
+            for ip in self.whitelist_ips
+        )
+
+        if subnet_exists:
+            return False
+
+        # 移除不匹配的旧网段，保留精确IP和其他网段
+        new_whitelist = []
+        for ip in self.whitelist_ips:
+            if ip == "127.0.0.1" or ip == "::1":
+                new_whitelist.append(ip)
+            elif "*" not in ip and ("." in ip or ":" in ip):
+                new_whitelist.append(ip)
+            elif "*" in ip:
+                if is_ipv6:
+                    ip_prefix = ip.split(":")[0] if ":" in ip else ""
+                    local_prefix = local_ip.split(":")[0]
+                    if ip_prefix and ip_prefix != local_prefix:
+                        new_whitelist.append(ip)
+                else:
+                    ip_parts_local = local_ip.split(".")
+                    ip_prefix = ip.split(".")[0] if "." in ip else ""
+                    if (
+                        ip_prefix
+                        and ip_prefix.isdigit()
+                        and ip_prefix != ip_parts_local[0]
+                    ):
+                        new_whitelist.append(ip)
+
+        if current_subnet not in new_whitelist:
+            new_whitelist.insert(0, current_subnet)
+        if "127.0.0.1" not in new_whitelist:
+            new_whitelist.append("127.0.0.1")
+        if "::1" not in new_whitelist:
+            new_whitelist.append("::1")
+
+        self.whitelist_ips = new_whitelist
+        self.save_config()
+        print(f"白名单网段已更新: {current_subnet} (本地IP: {local_ip})")
+        return True
+
+    def create_whitelist(self) -> bool:
+        """
+        创建或更新 IP 白名单配置
+        自动检测本地网段并添加到白名单
+        """
+        local_ip = get_network_manager().get_local_ip()
+
+        try:
+            if local_ip:
+                subnet = self._get_subnet_from_ip(local_ip)
+                if subnet and subnet not in self.whitelist_ips:
+                    self.whitelist_ips.insert(0, subnet)
+                    if "127.0.0.1" not in self.whitelist_ips:
+                        self.whitelist_ips.append("127.0.0.1")
+                    if "::1" not in self.whitelist_ips:
+                        self.whitelist_ips.append("::1")
+                    self.save_config()
+                    print(f"白名单已更新，添加网段: {subnet} (本地IP: {local_ip})")
+                elif not subnet:
+                    print(f"无法提取网段 (本地IP: {local_ip})")
+            else:
+                print("无法获取本地IP，白名单未更新")
+            return True
+        except Exception as e:
+            print(f"白名单更新失败: {e}")
+            return False
+
+    def sync_whitelists(self, source: str = "ip"):
+        """
+        同步白名单内容
+
+        Args:
+            source: "ip" 表示从 IP 白名单同步到 Host 白名单，
+                    "host" 表示从 Host 白名单同步到 IP 白名单
+        """
+        def is_valid_ip_or_pattern(entry: str) -> bool:
+            if not entry:
+                return False
+            if entry == "localhost":
+                return False
+            ipv4_pattern = r"^(\d{1,3}\.){3}\d{1,3}(\.\*)?$"
+            ipv6_pattern = r"^[0-9a-fA-F:]+::?[0-9a-fA-F:]*$|^\[[0-9a-fA-F:]+\]$|^[0-9a-fA-F:]+::\*$"
+            ipv4_cidr = r"^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$"
+            ipv6_cidr = r"^[0-9a-fA-F:]+/\d{1,3}$"
+            wildcard = r"^(\d{1,3}\.){0,3}\*$|^(\d{1,3}\.){0,2}\*\.\*$"
+            return bool(
+                re.match(ipv4_pattern, entry)
+                or re.match(ipv6_pattern, entry)
+                or re.match(ipv4_cidr, entry)
+                or re.match(ipv6_cidr, entry)
+                or re.match(wildcard, entry)
+            )
+
+        if source == "ip":
+            new_hosts = []
+            if "localhost" in self.host_whitelist_hosts:
+                new_hosts.append("localhost")
+            for ip in self.whitelist_ips:
+                if ":" in ip and not ip.startswith("["):
+                    new_hosts.append(f"[{ip}]")
+                else:
+                    new_hosts.append(ip)
+            self.host_whitelist_hosts = new_hosts
+        else:
+            new_ips = []
+            for host in self.host_whitelist_hosts:
+                if host == "localhost":
+                    continue
+                if host.startswith("[") and host.endswith("]"):
+                    inner = host[1:-1]
+                    if is_valid_ip_or_pattern(inner):
+                        new_ips.append(inner)
+                elif is_valid_ip_or_pattern(host):
+                    new_ips.append(host)
+            self.whitelist_ips = new_ips
+
+        self.save_config()
+        print(f"白名单已同步: {source} -> {'host' if source == 'ip' else 'ip'}")
 
     def set(self, key, value):
         """设置配置项"""

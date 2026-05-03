@@ -1577,20 +1577,24 @@ class SillyTavernCliLauncher:
             print(f"当前配置:")
             print(f"  端口: {self.stCfg.port}")
             print(f"  局域网监听: {'启用' if self.stCfg.listen else '禁用'}")
+            print(f"  IP 白名单: {'启用' if self.stCfg.whitelist_mode else '禁用'}")
+            print(f"  Host 白名单: {'启用' if self.stCfg.host_whitelist_enabled else '禁用'}")
 
             print("\n选项:")
             print("1. 修改端口")
             print("2. 启用局域网监听")
             print("3. 禁用局域网监听")
             print("4. 查看详细配置")
+            print("5. 编辑 IP 白名单")
+            print("6. 编辑 Host 白名单")
+            print("7. 统一白名单同步")
             print("0. 返回主菜单")
             print("=" * 50)
 
             try:
-                choice = input("请选择操作 [0-4]: ").strip()
+                choice = input("请选择操作 [0-7]: ").strip()
 
                 if choice == "1":
-                    # 修改端口
                     try:
                         new_port = input(
                             f"请输入新端口 (当前: {self.stCfg.port}): "
@@ -1610,26 +1614,23 @@ class SillyTavernCliLauncher:
                         print("✗ 错误: 请输入有效的端口号")
 
                 elif choice == "2":
-                    # 启用局域网监听
                     if not self.stCfg.listen:
                         self.stCfg.listen = True
                         self.stCfg.save_config()
                         print("✓ 局域网监听已启用")
                         print("  重新启动SillyTavern后生效")
 
-                        # 询问是否创建白名单
-                        create_whitelist = input(
-                            "\n是否创建默认白名单文件? (Y/n): "
+                        create_wl = input(
+                            "\n是否自动检测网段并添加到 IP 白名单? (Y/n): "
                         ).strip()
-                        if create_whitelist.lower() != "n":
-                            self.stCfg.create_whitelist()
-                            print("✓ 白名单文件已创建")
-                            print("  白名单位置: SillyTavern/whitelist.txt")
+                        if create_wl.lower() != "n":
+                            if self.stCfg.create_whitelist():
+                                print("✓ IP 白名单已更新")
+                                print(f"  当前白名单: {', '.join(self.stCfg.whitelist_ips)}")
                     else:
                         print("局域网监听已经是启用状态")
 
                 elif choice == "3":
-                    # 禁用局域网监听
                     if self.stCfg.listen:
                         self.stCfg.listen = False
                         self.stCfg.save_config()
@@ -1639,27 +1640,203 @@ class SillyTavernCliLauncher:
                         print("局域网监听已经是禁用状态")
 
                 elif choice == "4":
-                    # 查看详细配置
-                    print("\n" + "=" * 50)
-                    print("SillyTavern 详细配置")
-                    print("=" * 50)
-                    print(f"配置文件: {self.stCfg.config_path}")
-                    print(f"端口: {self.stCfg.port}")
-                    print(f"局域网监听: {'启用' if self.stCfg.listen else '禁用'}")
-                    print(f"白名单文件: {self.stCfg.whitelist_path}")
-                    print(
-                        f"白名单存在: {'是' if os.path.exists(self.stCfg.whitelist_path) else '否'}"
-                    )
+                    self._show_st_config_detail()
 
-                    if self.stCfg.listen:
-                        print("\n访问地址:")
-                        print(f"  本地访问: http://localhost:{self.stCfg.port}")
-                        print(f"  局域网访问: http://<本机IP>:{self.stCfg.port}")
+                elif choice == "5":
+                    self._show_ip_whitelist_menu()
+
+                elif choice == "6":
+                    self._show_host_whitelist_menu()
+
+                elif choice == "7":
+                    self._show_unified_whitelist_menu()
+
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-7 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n收到退出信号，返回主菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
+
+    def _show_st_config_detail(self):
+        """显示详细配置"""
+        print("\n" + "=" * 50)
+        print("SillyTavern 详细配置")
+        print("=" * 50)
+        print(f"配置文件: {self.stCfg.config_path}")
+        print(f"端口: {self.stCfg.port}")
+        print(f"局域网监听: {'启用' if self.stCfg.listen else '禁用'}")
+        print()
+        print(f"IP 白名单过滤: {'启用' if self.stCfg.whitelist_mode else '禁用'}")
+        print(f"检查转发头 IP: {'启用' if self.stCfg.enable_forwarded_whitelist else '禁用'}")
+        print(f"IP 白名单条目:")
+        for ip in self.stCfg.whitelist_ips:
+            print(f"  - {ip}")
+        print()
+        print(f"Host 白名单过滤: {'启用' if self.stCfg.host_whitelist_enabled else '禁用'}")
+        print(f"Host 未信任请求记录: {'启用' if self.stCfg.host_whitelist_scan else '禁用'}")
+        print(f"Host 白名单条目:")
+        for host in self.stCfg.host_whitelist_hosts:
+            print(f"  - {host}")
+        print()
+        print(f"统一白名单同步: {'启用' if self.stCfg.unified_whitelist else '禁用'}")
+
+        if self.stCfg.listen:
+            print(f"\n访问地址:")
+            print(f"  本地访问: http://localhost:{self.stCfg.port}")
+            print(f"  局域网访问: http://<本机IP>:{self.stCfg.port}")
+        else:
+            print(f"\n访问地址:")
+            print(f"  本地访问: http://localhost:{self.stCfg.port}")
+
+        print("=" * 50)
+
+    def _show_ip_whitelist_menu(self):
+        """IP 白名单编辑菜单"""
+        while True:
+            print("\n" + "-" * 40)
+            print("IP 白名单管理")
+            print("-" * 40)
+            print(f"IP 白名单过滤: {'启用' if self.stCfg.whitelist_mode else '禁用'}")
+            print(f"检查转发头 IP: {'启用' if self.stCfg.enable_forwarded_whitelist else '禁用'}")
+            print(f"当前条目: {', '.join(self.stCfg.whitelist_ips)}")
+            print()
+            print("1. 启用/禁用 IP 白名单过滤")
+            print("2. 启用/禁用检查转发头 IP")
+            print("3. 编辑白名单条目")
+            print("4. 自动添加当前网段")
+            print("5. 重置为默认值")
+            print("0. 返回上级菜单")
+            print("-" * 40)
+
+            try:
+                choice = input("请选择操作 [0-5]: ").strip()
+
+                if choice == "1":
+                    self.stCfg.whitelist_mode = not self.stCfg.whitelist_mode
+                    status = "启用" if self.stCfg.whitelist_mode else "禁用"
+                    self.stCfg.save_config()
+                    print(f"✓ IP 白名单过滤已{status}")
+
+                elif choice == "2":
+                    self.stCfg.enable_forwarded_whitelist = not self.stCfg.enable_forwarded_whitelist
+                    status = "启用" if self.stCfg.enable_forwarded_whitelist else "禁用"
+                    self.stCfg.save_config()
+                    print(f"✓ 检查转发头 IP 已{status}")
+
+                elif choice == "3":
+                    print("\n当前 IP 白名单条目（每行一个，输入空行结束）:")
+                    for ip in self.stCfg.whitelist_ips:
+                        print(f"  {ip}")
+                    print("\n请输入新的白名单条目（覆盖现有，每行一个）:")
+                    print("支持格式: 192.168.1.*, 10.0.0.1, ::1, 192.168.0.0/24")
+                    new_entries = []
+                    while True:
+                        line = input("  > ").strip()
+                        if not line:
+                            break
+                        new_entries.append(line)
+                    if new_entries:
+                        self.stCfg.whitelist_ips = new_entries
+                        self.stCfg.save_config()
+                        print(f"✓ IP 白名单已更新，共 {len(new_entries)} 个条目")
+                        if self.stCfg.unified_whitelist:
+                            self.stCfg.sync_whitelists("ip")
+                            print("  已同步到 Host 白名单")
                     else:
-                        print("\n访问地址:")
-                        print(f"  本地访问: http://localhost:{self.stCfg.port}")
+                        print("取消编辑")
 
-                    print("=" * 50)
+                elif choice == "4":
+                    if self.stCfg.create_whitelist():
+                        print(f"✓ 当前白名单: {', '.join(self.stCfg.whitelist_ips)}")
+                        if self.stCfg.unified_whitelist:
+                            self.stCfg.sync_whitelists("ip")
+                            print("  已同步到 Host 白名单")
+
+                elif choice == "5":
+                    self.stCfg.whitelist_ips = ["::1", "127.0.0.1"]
+                    self.stCfg.save_config()
+                    print("✓ IP 白名单已重置为默认值: ::1, 127.0.0.1")
+                    if self.stCfg.unified_whitelist:
+                        self.stCfg.sync_whitelists("ip")
+                        print("  已同步到 Host 白名单")
+
+                elif choice == "0":
+                    break
+                else:
+                    print("无效选择，请输入 0-5 之间的数字")
+
+            except KeyboardInterrupt:
+                print("\n返回上级菜单...")
+                break
+            except Exception as e:
+                print(f"发生错误: {e}")
+
+    def _show_host_whitelist_menu(self):
+        """Host 白名单编辑菜单"""
+        while True:
+            print("\n" + "-" * 40)
+            print("Host 白名单管理")
+            print("-" * 40)
+            print(f"Host 白名单过滤: {'启用' if self.stCfg.host_whitelist_enabled else '禁用'}")
+            print(f"未信任请求记录: {'启用' if self.stCfg.host_whitelist_scan else '禁用'}")
+            print(f"当前条目: {', '.join(self.stCfg.host_whitelist_hosts)}")
+            print()
+            print("1. 启用/禁用 Host 白名单过滤")
+            print("2. 启用/禁用未信任请求记录 (扫描模式)")
+            print("3. 编辑白名单条目")
+            print("4. 重置为默认值")
+            print("0. 返回上级菜单")
+            print("-" * 40)
+
+            try:
+                choice = input("请选择操作 [0-4]: ").strip()
+
+                if choice == "1":
+                    self.stCfg.host_whitelist_enabled = not self.stCfg.host_whitelist_enabled
+                    status = "启用" if self.stCfg.host_whitelist_enabled else "禁用"
+                    self.stCfg.save_config()
+                    print(f"✓ Host 白名单过滤已{status}")
+
+                elif choice == "2":
+                    self.stCfg.host_whitelist_scan = not self.stCfg.host_whitelist_scan
+                    status = "启用" if self.stCfg.host_whitelist_scan else "禁用"
+                    self.stCfg.save_config()
+                    print(f"✓ 未信任请求记录已{status}")
+
+                elif choice == "3":
+                    print("\n当前 Host 白名单条目（每行一个，输入空行结束）:")
+                    for host in self.stCfg.host_whitelist_hosts:
+                        print(f"  {host}")
+                    print("\n请输入新的白名单条目（覆盖现有，每行一个）:")
+                    print("支持格式: localhost, 192.168.1.100, [::1]")
+                    new_entries = []
+                    while True:
+                        line = input("  > ").strip()
+                        if not line:
+                            break
+                        new_entries.append(line)
+                    if new_entries:
+                        self.stCfg.host_whitelist_hosts = new_entries
+                        self.stCfg.save_config()
+                        print(f"✓ Host 白名单已更新，共 {len(new_entries)} 个条目")
+                        if self.stCfg.unified_whitelist:
+                            self.stCfg.sync_whitelists("host")
+                            print("  已同步到 IP 白名单")
+                    else:
+                        print("取消编辑")
+
+                elif choice == "4":
+                    self.stCfg.host_whitelist_hosts = ["localhost", "127.0.0.1", "[::1]"]
+                    self.stCfg.save_config()
+                    print("✓ Host 白名单已重置为默认值: localhost, 127.0.0.1, [::1]")
+                    if self.stCfg.unified_whitelist:
+                        self.stCfg.sync_whitelists("host")
+                        print("  已同步到 IP 白名单")
 
                 elif choice == "0":
                     break
@@ -1667,10 +1844,59 @@ class SillyTavernCliLauncher:
                     print("无效选择，请输入 0-4 之间的数字")
 
             except KeyboardInterrupt:
-                print("\n收到退出信号，返回主菜单...")
+                print("\n返回上级菜单...")
                 break
             except Exception as e:
                 print(f"发生错误: {e}")
+
+    def _show_unified_whitelist_menu(self):
+        """统一白名单同步菜单"""
+        print("\n" + "-" * 40)
+        print("统一白名单同步")
+        print("-" * 40)
+        print(f"当前状态: {'启用' if self.stCfg.unified_whitelist else '禁用'}")
+        print()
+        print("启用后，IP 白名单和 Host 白名单将保持同步。")
+        print("编辑任一白名单时，另一个会自动更新。")
+        print()
+        print("1. 启用统一同步")
+        print("2. 禁用统一同步")
+        print("3. 立即从 IP 白名单同步到 Host 白名单")
+        print("4. 立即从 Host 白名单同步到 IP 白名单")
+        print("0. 返回上级菜单")
+        print("-" * 40)
+
+        try:
+            choice = input("请选择操作 [0-4]: ").strip()
+
+            if choice == "1":
+                self.stCfg.unified_whitelist = True
+                self.stCfg.sync_whitelists("ip")
+                self.stCfg.save_config()
+                print("✓ 统一白名单同步已启用，并已从 IP 白名单同步到 Host 白名单")
+
+            elif choice == "2":
+                self.stCfg.unified_whitelist = False
+                self.stCfg.save_config()
+                print("✓ 统一白名单同步已禁用")
+
+            elif choice == "3":
+                self.stCfg.sync_whitelists("ip")
+                print("✓ 已从 IP 白名单同步到 Host 白名单")
+
+            elif choice == "4":
+                self.stCfg.sync_whitelists("host")
+                print("✓ 已从 Host 白名单同步到 IP 白名单")
+
+            elif choice == "0":
+                return
+            else:
+                print("无效选择")
+
+        except KeyboardInterrupt:
+            print("\n返回上级菜单...")
+        except Exception as e:
+            print(f"发生错误: {e}")
 
     def show_migrate_menu(self):
         """显示迁移功能菜单"""
