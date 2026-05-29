@@ -1,5 +1,6 @@
 import os
 import re
+import ipaddress
 from typing import Optional
 from ruamel.yaml import YAML
 from network import get_network_manager
@@ -82,17 +83,26 @@ class stcfg:
             with open(self.config_path, "w", encoding="utf-8") as file:
                 self.yaml.dump(self.config_data, file)
 
+            return True
+
         except Exception as e:
             print(f"保存配置文件时出错: {e}")
+            return False
 
     def _get_subnet_from_ip(self, ip: str) -> Optional[str]:
         """从IP地址提取网段通配符，如 192.168.1.42 -> 192.168.1.*"""
         try:
             if ":" in ip:
-                parts = ip.split(":")
-                if len(parts) >= 2:
-                    return f"{parts[0]}:{parts[1]}::*"
-                return None
+                try:
+                    addr = ipaddress.ip_address(ip)
+                    if isinstance(addr, ipaddress.IPv6Address):
+                        # Expand to full form and take first 4 groups (64-bit prefix)
+                        full = addr.exploded  # e.g., "fe80:0000:0000:0000:0000:0000:0000:0001"
+                        parts = full.split(":")
+                        return f"{parts[0]}:{parts[1]}:{parts[2]}:{parts[3]}::*"
+                except ValueError:
+                    pass
+                return ip
             parts = ip.split(".")
             if len(parts) == 4:
                 return f"{parts[0]}.{parts[1]}.{parts[2]}.*"
@@ -122,13 +132,15 @@ class stcfg:
                 self.whitelist_ips = migrated_ips + [
                     ip for ip in self.whitelist_ips if ip not in migrated_ips
                 ]
-                self.save_config()
-                print(f"已从 whitelist.txt 迁移 {len(new_ips)} 个 IP 到 config.yaml")
-                try:
-                    os.remove(self.whitelist_txt_path)
-                    print("已删除旧的 whitelist.txt 文件")
-                except Exception as e:
-                    print(f"删除 whitelist.txt 失败: {e}")
+                if self.save_config():
+                    print(f"已从 whitelist.txt 迁移 {len(new_ips)} 个 IP 到 config.yaml")
+                    try:
+                        os.remove(self.whitelist_txt_path)
+                        print("已删除旧的 whitelist.txt 文件")
+                    except Exception as e:
+                        print(f"删除 whitelist.txt 失败: {e}")
+                else:
+                    print("保存配置失败，保留 whitelist.txt 原文件")
 
             return True
 
@@ -277,13 +289,9 @@ class stcfg:
         print(f"白名单已同步: {source} -> {'host' if source == 'ip' else 'ip'}")
 
     def set(self, key, value):
-        """设置配置项"""
-        if hasattr(self, key):
-            setattr(self, key, value)
-            self.config_data[key] = value
-        else:
-            raise AttributeError(f"配置项 '{key}' 不存在")
+        """设置配置项（仅操作 config_data 字典）"""
+        self.config_data[key] = value
 
     def get(self, key, default=None):
         """获取配置项"""
-        return getattr(self, key, default)
+        return self.config_data.get(key, default)

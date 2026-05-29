@@ -33,8 +33,7 @@ def checkout_st_version(commit_hash, st_dir=None):
     try:
         # 步骤1：检查当前分支状态
         check_branch = subprocess.run(
-            "git rev-parse --abbrev-ref HEAD",
-            shell=True,
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
             cwd=st_dir,
@@ -50,8 +49,7 @@ def checkout_st_version(commit_hash, st_dir=None):
 
             # 尝试切换到release分支
             checkout_release = subprocess.run(
-                "git checkout release",
-                shell=True,
+                ["git", "checkout", "release"],
                 capture_output=True,
                 text=True,
                 cwd=st_dir,
@@ -61,8 +59,7 @@ def checkout_st_version(commit_hash, st_dir=None):
                 # 如果本地没有release分支，从远程创建
                 print("本地没有release分支，从远程创建...")
                 checkout_release = subprocess.run(
-                    "git checkout -b release origin/release",
-                    shell=True,
+                    ["git", "checkout", "-b", "release", "origin/release"],
                     capture_output=True,
                     text=True,
                     cwd=st_dir,
@@ -79,8 +76,7 @@ def checkout_st_version(commit_hash, st_dir=None):
             print(f"当前在 {current_branch} 分支，切换到release分支...")
 
             checkout_release = subprocess.run(
-                "git checkout release",
-                shell=True,
+                ["git", "checkout", "release"],
                 capture_output=True,
                 text=True,
                 cwd=st_dir,
@@ -94,8 +90,7 @@ def checkout_st_version(commit_hash, st_dir=None):
 
         # 步骤4：检查工作区状态
         status_result = subprocess.run(
-            "git status --porcelain",
-            shell=True,
+            ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
             cwd=st_dir,
@@ -114,9 +109,9 @@ def checkout_st_version(commit_hash, st_dir=None):
             ]
 
             if non_package_lock_changes:
-                stash_cmd = f'git stash push -m "版本切换前保存{commit_hash[:7]}"'
                 stash_result = subprocess.run(
-                    stash_cmd, shell=True, capture_output=True, text=True, cwd=st_dir
+                    ["git", "stash", "push", "-m", f"版本切换前保存{commit_hash[:7]}"],
+                    capture_output=True, text=True, cwd=st_dir
                 )
 
                 if stash_result.returncode != 0:
@@ -128,8 +123,7 @@ def checkout_st_version(commit_hash, st_dir=None):
             else:
                 # 只有package-lock.json被修改，恢复它
                 subprocess.run(
-                    "git checkout -- package-lock.json",
-                    shell=True,
+                    ["git", "checkout", "--", "package-lock.json"],
                     capture_output=True,
                     text=True,
                     cwd=st_dir,
@@ -137,17 +131,15 @@ def checkout_st_version(commit_hash, st_dir=None):
 
         # 步骤6：使用git reset --hard切换到指定commit（保持在release分支上）
         print(f"在release分支上切换到commit {commit_hash[:7]}...")
-        reset_cmd = f"git reset --hard {commit_hash}"
-
         reset_result = subprocess.run(
-            reset_cmd, shell=True, capture_output=True, text=True, cwd=st_dir
+            ["git", "reset", "--hard", commit_hash],
+            capture_output=True, text=True, cwd=st_dir
         )
 
         if reset_result.returncode == 0:
             # 验证当前状态
             verify_branch = subprocess.run(
-                "git rev-parse --abbrev-ref HEAD",
-                shell=True,
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True,
                 text=True,
                 cwd=st_dir,
@@ -292,8 +284,7 @@ def check_git_status(st_dir=None):
     try:
         # 检查是否有未提交的更改
         result = subprocess.run(
-            "git status --porcelain",
-            shell=True,
+            ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
             cwd=st_dir,
@@ -316,14 +307,13 @@ def check_git_status(st_dir=None):
                 # 只有package-lock.json被修改，自动恢复它
                 try:
                     subprocess.run(
-                        "git checkout -- package-lock.json",
-                        shell=True,
+                        ["git", "checkout", "--", "package-lock.json"],
                         capture_output=True,
                         text=True,
                         cwd=st_dir,
                     )
                     return True, "工作区干净（已自动恢复package-lock.json）"
-                except:
+                except Exception:
                     pass
 
             # 如果还有其他文件被修改，返回错误
@@ -352,7 +342,8 @@ def get_current_commit(st_dir=None):
 
     try:
         result = subprocess.run(
-            "git rev-parse HEAD", shell=True, capture_output=True, text=True, cwd=st_dir
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, cwd=st_dir
         )
 
         if result.returncode == 0:
@@ -400,8 +391,7 @@ def get_st_tags(st_dir=None):
     try:
         # 步骤1: 获取本地tag列表
         list_tags_result = subprocess.run(
-            "git tag -l",
-            shell=True,
+            ["git", "tag", "-l"],
             capture_output=True,
             text=True,
             cwd=st_dir,
@@ -452,8 +442,7 @@ def get_st_tags(st_dir=None):
             # 使用 git show 获取 tag 的 commit hash 和日期
             # %H = 完整commit hash, %aI = ISO 8601 格式的作者日期
             show_result = subprocess.run(
-                f'git show {tag_name} --format="%H|%aI" -s',
-                shell=True,
+                ["git", "show", tag_name, "--format=%H|%aI", "-s"],
                 capture_output=True,
                 text=True,
                 cwd=st_dir,
@@ -523,8 +512,7 @@ def fetch_remote_tags(st_dir=None):
 
     try:
         result = subprocess.run(
-            "git fetch origin --tags",
-            shell=True,
+            ["git", "fetch", "origin", "--tags"],
             capture_output=True,
             text=True,
             cwd=st_dir,
@@ -537,26 +525,3 @@ def fetch_remote_tags(st_dir=None):
 
     except Exception as e:
         return False, f"获取远程tags时出错: {str(e)}"
-
-
-# 使用示例
-if __name__ == "__main__":
-    # 示例1：切换到指定版本
-    print("=== 示例1：切换版本 ===")
-    success, message = checkout_st_version("abc1234")
-    print(f"结果: {success}")
-    print(f"消息: {message}")
-
-    # 示例2：检查Git状态
-    print("\n=== 示例2：检查Git状态 ===")
-    is_clean, message = check_git_status()
-    print(f"工作区干净: {is_clean}")
-    print(f"消息: {message}")
-
-    # 示例3：获取当前commit
-    print("\n=== 示例3：获取当前commit ===")
-    success, commit, message = get_current_commit()
-    if success:
-        print(f"当前commit: {commit[:7]}")
-    else:
-        print(f"错误: {message}")

@@ -18,6 +18,7 @@ from update_checker import UpdateChecker
 from st_migrator import STMigrator
 from version import version as current_version
 from utils import MirrorBuilder
+from utils.sync_common import format_size
 
 
 class SillyTavernCliLauncher:
@@ -39,7 +40,8 @@ class SillyTavernCliLauncher:
             sys.exit(0)
 
         # 检查系统环境
-        self.check_system_env()
+        if not self.check_system_env():
+            sys.exit(1)
 
         self.stCfg = stcfg()
         self.version_manager = STVersionManager()
@@ -144,7 +146,7 @@ class SillyTavernCliLauncher:
 
             while select.select([sys.stdin], [], [], 0)[0]:
                 sys.stdin.read(1)
-        except:
+        except Exception:
             pass
 
         # 等待用户输入（仅一次）
@@ -260,18 +262,14 @@ class SillyTavernCliLauncher:
                 downloads = self.config_manager.get("downloads", [])
                 downloads.append(record)
                 self.config_manager.set("downloads", downloads)
-            elif action_type == "agreement_accepted":
-                history = self.config_manager.get("agreement_history", [])
-                history.append(record)
-                self.config_manager.set("agreement_history", history)
-            elif action_type == "first_start_confirmed":
+            elif action_type in ("agreement_accepted", "first_start_confirmed"):
                 history = self.config_manager.get("agreement_history", [])
                 history.append(record)
                 self.config_manager.set("agreement_history", history)
 
             self.config_manager.save_config()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"警告: 记录操作失败: {e}")
 
     def is_command_available(self, cmd):
         """检查命令是否可用"""
@@ -828,7 +826,7 @@ class SillyTavernCliLauncher:
                 info = server_info.get("server_info", {})
                 print(f"服务器信息:")
                 print(f"  文件数量: {info.get('file_count', 0)}")
-                print(f"  总大小: {client._format_size(info.get('total_size', 0))}")
+                print(f"  总大小: {format_size(info.get('total_size', 0))}")
 
             # Perform sync
             print(f"开始从服务器同步: {server_url}")
@@ -875,7 +873,7 @@ class SillyTavernCliLauncher:
                 info = server_info.get("server_info", {})
                 print(f"服务器信息:")
                 print(f"  文件数量: {info.get('file_count', 0)}")
-                print(f"  总大小: {client._format_size(info.get('total_size', 0))}")
+                print(f"  总大小: {format_size(info.get('total_size', 0))}")
 
             # 询问是否同步
             sync_choice = input("是否从此服务器同步数据？(Y/n): ").strip()
@@ -1057,14 +1055,15 @@ class SillyTavernCliLauncher:
             print("4. 显示同步配置")
             print("5. 测试服务器连接 (支持 IP:端口 格式)")
             print("6. 设置同步服务器端口")
+            saved_servers_num = None
             if not status["consistent"]:
                 print("7. 修复状态不一致问题")
+                saved_servers_num = 8
+            else:
+                saved_servers_num = 7
             saved_servers = self.config_manager.get("sync.saved_servers", [])
             if saved_servers:
-                option_num = 8
-                if status["consistent"]:
-                    option_num = 7
-                print(f"{option_num}. 已保存的服务器列表")
+                print(f"{saved_servers_num}. 已保存的服务器列表")
             print("0. 返回主菜单")
             print("=" * 50)
 
@@ -1162,7 +1161,7 @@ class SillyTavernCliLauncher:
                                     print(f"  服务器地址: {server_url}")
                                     print(f"  文件数量: {info.get('file_count', 0)}")
                                     print(
-                                        f"  总大小: {client._format_size(info.get('total_size', 0))}"
+                                        f"  总大小: {format_size(info.get('total_size', 0))}"
                                     )
                             else:
                                 print(f"服务器连接失败: {server_url}")
@@ -1205,7 +1204,7 @@ class SillyTavernCliLauncher:
                         print("状态已修复，配置已同步到实际运行状态")
                     else:
                         print("状态已经一致，无需修复")
-                elif choice == "8":
+                elif choice == str(saved_servers_num) and saved_servers:
                     # 处理已保存的服务器列表
                     self._manage_saved_servers()
                 elif choice == "0":
@@ -1530,7 +1529,7 @@ class SillyTavernCliLauncher:
                         )
                         if result.returncode == 0:
                             print(f"最新提交: {result.stdout.strip()}")
-                    except:
+                    except Exception:
                         pass
 
                     print("=" * 50)
@@ -2064,7 +2063,7 @@ class SillyTavernCliLauncher:
                 if result.returncode == 0:
                     branch = result.stdout.strip()
                     print(f"当前分支: {branch}")
-            except:
+            except Exception:
                 pass
         else:
             print(f"Git状态: {msg}")
@@ -2546,7 +2545,7 @@ def main():
             print("  st sync menu            - 进入同步菜单")
             print("")
             print("可选参数:")
-            print("  --port <port>           - 服务器端口 (默认: 5000)")
+            print("  --port <port>           - 服务器端口 (默认: 9999)")
             print("  --host <host>           - 服务器主机地址 (默认: 0.0.0.0)")
             print(
                 "  --method <method>       - 同步方法: auto, zip, incremental (默认: auto)"

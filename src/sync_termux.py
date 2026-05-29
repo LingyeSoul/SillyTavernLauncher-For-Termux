@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sync_client import SyncClient
 from sync_server import SyncServer
 from config import ConfigManager
+from utils.sync_common import format_size
 
 
 class TermuxSyncManager:
@@ -26,7 +27,7 @@ class TermuxSyncManager:
         self.config = self.config_manager.config
 
         # Define paths
-        self.base_dir = os.path.expanduser("~/SillytavernLauncher")
+        self.base_dir = os.path.expanduser("~/SillyTavernLauncher")
         self.st_dir = os.path.join(self.base_dir, "SillyTavern")
         self.data_dir = os.path.join(self.st_dir, "data", "default-user")
 
@@ -89,7 +90,7 @@ class TermuxSyncManager:
                  local_ip.startswith('10.') or
                  local_ip.startswith('172.'))):
                 return local_ip
-        except:
+        except Exception:
             pass
 
         # 最后回退
@@ -193,7 +194,7 @@ class TermuxSyncManager:
                     try:
                         total_size += os.path.getsize(file_path)
                         file_count += 1
-                    except:
+                    except OSError:
                         continue
 
             print(f"  数据大小: {self._format_size(total_size)}")
@@ -202,17 +203,7 @@ class TermuxSyncManager:
             print(f"  数据目录: 不存在")
 
     def _format_size(self, size_bytes):
-        """Format file size in human readable format"""
-        if size_bytes == 0:
-            return "0B"
-
-        size_names = ["B", "KB", "MB", "GB"]
-        i = 0
-        while size_bytes >= 1024 and i < len(size_names) - 1:
-            size_bytes /= 1024.0
-            i += 1
-
-        return f"{size_bytes:.1f}{size_names[i]}"
+        return format_size(size_bytes)
 
 
 def main():

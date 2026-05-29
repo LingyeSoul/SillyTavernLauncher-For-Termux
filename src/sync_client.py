@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import tempfile
 import argparse
+from utils.sync_common import format_size, find_data_path, validate_safe_path
 
 
 class SyncClient:
@@ -28,7 +29,7 @@ class SyncClient:
             timeout (int): Request timeout in seconds
         """
         self.server_url = server_url.rstrip('/')
-        self.data_path = data_path or self._find_data_path()
+        self.data_path = data_path or find_data_path(extra_paths=["./backup/default-user"], match_parent=True)
         self.timeout = timeout
         self.session = requests.Session()
 
@@ -39,25 +40,6 @@ class SyncClient:
         print(f"服务器地址: {self.server_url}")
         print(f"本地数据路径: {self.data_path}")
 
-    def _find_data_path(self):
-        """Auto-detect SillyTavern data path"""
-        possible_paths = [
-            os.path.join(os.getcwd(), "SillyTavern", "data", "default-user"),
-            os.path.join(os.getcwd(), "data", "default-user"),
-            os.path.expanduser("~/SillyTavern/data/default-user"),
-            "./SillyTavern/data/default-user",
-            "./backup/default-user"  # 添加备份目录
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path) or os.path.exists(os.path.dirname(path)):
-                print(f"检测到数据目录: {path}")
-                return path
-
-        # Fallback to current directory structure
-        default_path = os.path.join(os.getcwd(), "SillyTavern", "data", "default-user")
-        print(f"未找到数据目录，使用默认路径: {default_path}")
-        return default_path
 
     def _request(self, endpoint, method='GET', params=None, stream=False):
         """Make HTTP request to server"""
@@ -223,15 +205,16 @@ class SyncClient:
                     total_size += remote_file['size']
 
             # Check for local files that don't exist remotely
+            remote_paths = {f['path'] for f in remote_manifest}
             for local_path in local_files:
-                if local_path not in [f['path'] for f in remote_manifest]:
+                if local_path not in remote_paths:
                     files_to_delete.append(local_path)
 
             if not files_to_download and not files_to_delete:
                 print("数据已是最新，无需同步")
                 return True
 
-            print(f"需要下载 {len(files_to_download)} 个文件 ({self._format_size(total_size)})")
+            print(f"需要下载 {len(files_to_download)} 个文件 ({format_size(total_size)})")
             print(f"需要删除 {len(files_to_delete)} 个文件")
 
             # Delete obsolete files
@@ -251,7 +234,7 @@ class SyncClient:
                     downloaded_size += file_info['size']
                     progress = (i / len(files_to_download)) * 100
                     print(f"进度: {i}/{len(files_to_download)} ({progress:.1f}%) - "
-                          f"{self._format_size(downloaded_size)}/{self._format_size(total_size)}")
+                          f"{format_size(downloaded_size)}/{format_size(total_size)}")
                 else:
                     print(f"下载失败: {file_info['path']}")
 
@@ -284,7 +267,7 @@ class SyncClient:
         if server_info:
             print(f"服务器信息:")
             print(f"  文件数量: {server_info.get('server_info', {}).get('file_count', 0)}")
-            print(f"  总大小: {self._format_size(server_info.get('server_info', {}).get('total_size', 0))}")
+            print(f"  总大小: {format_size(server_info.get('server_info', {}).get('total_size', 0))}")
 
         if prefer_zip:
             # Try ZIP sync first
@@ -309,7 +292,11 @@ class SyncClient:
             response = self._request('file', params={'path': file_info['path']}, stream=True)
 
             # Ensure directory exists
-            file_path = os.path.join(self.data_path, file_info['path'])
+            # Validate path safety (prevent path traversal)
+            file_path = validate_safe_path(self.data_path, file_info['path'])
+            if file_path is None:
+                print(f"跳过不安全路径: {file_info['path']}")
+                return False
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
             # Save file
@@ -387,6 +374,12 @@ class SyncClient:
                 if file.endswith('/'):
                     continue
 
+                # Validate path safety (prevent zip-slip)
+                target = validate_safe_path(extract_path, file)
+                if target is None:
+                    print(f"跳过不安全路径: {file}")
+                    continue
+
                 # Extract file
                 zip_file.extract(file, extract_path)
 
@@ -395,18 +388,6 @@ class SyncClient:
                     progress = (i / total_files) * 100
                     print(f"解压进度: {i}/{total_files} ({progress:.1f}%)")
 
-    def _format_size(self, size_bytes):
-        """Format file size in human readable format"""
-        if size_bytes == 0:
-            return "0B"
-
-        size_names = ["B", "KB", "MB", "GB"]
-        i = 0
-        while size_bytes >= 1024 and i < len(size_names) - 1:
-            size_bytes /= 1024.0
-            i += 1
-
-        return f"{size_bytes:.1f}{size_names[i]}"
 
 
 def main():

@@ -384,9 +384,9 @@ class STMigrator:
             print(f"    类型: {'Git 仓库' if install.has_git else '手动安装'}")
 
             if install.has_git:
-                git_info = f" ({install.git_branch})"
+                git_info = ""
                 if install.git_commit:
-                    git_info += f" [{install.git_commit}]"
+                    git_info = f" [{install.git_commit}]"
                 print(f"    分支: {install.git_branch}{git_info}")
 
             print(f"    最后修改: {mod_time}")
@@ -573,28 +573,30 @@ class STMigrator:
         dirname = os.path.basename(path)
         return dirname in excluded_dirs
 
+    def _clear_target(self, target):
+        """清除目标路径"""
+        if os.path.exists(target):
+            if os.path.isdir(target):
+                shutil.rmtree(target)
+            else:
+                os.remove(target)
+
+    def _validate_migration(self, target):
+        """验证迁移结果"""
+        if self.validate_installation(target).is_valid:
+            print(f"✓ 迁移验证成功")
+            return True
+        else:
+            print(f"✗ 迁移验证失败")
+            return False
+
     def _move_installation(self, source: str, target: str) -> bool:
         """移动整个安装"""
         try:
-            # 如果目标存在，先删除
-            if os.path.exists(target):
-                if os.path.isdir(target):
-                    shutil.rmtree(target)
-                else:
-                    os.remove(target)
-
-            # 移动目录
+            self._clear_target(target)
             shutil.move(source, target)
             print(f"✓ 文件已移动")
-
-            # 验证迁移结果
-            if self.validate_installation(target).is_valid:
-                print(f"✓ 迁移验证成功")
-                return True
-            else:
-                print(f"✗ 迁移验证失败")
-                return False
-
+            return self._validate_migration(target)
         except Exception as e:
             print(f"✗ 移动失败: {e}")
             return False
@@ -602,26 +604,11 @@ class STMigrator:
     def _copy_installation(self, source: str, target: str) -> bool:
         """复制整个安装"""
         try:
-            # 如果目标存在，先删除
-            if os.path.exists(target):
-                if os.path.isdir(target):
-                    shutil.rmtree(target)
-                else:
-                    os.remove(target)
-
-            # 复制目录
+            self._clear_target(target)
             print(f"正在复制文件...")
             shutil.copytree(source, target)
             print(f"✓ 文件已复制")
-
-            # 验证迁移结果
-            if self.validate_installation(target).is_valid:
-                print(f"✓ 迁移验证成功")
-                return True
-            else:
-                print(f"✗ 迁移验证失败")
-                return False
-
+            return self._validate_migration(target)
         except Exception as e:
             print(f"✗ 复制失败: {e}")
             return False
@@ -635,10 +622,6 @@ class STMigrator:
             if not os.path.exists(source_data):
                 print(f"✗ 源安装没有 data 目录")
                 return False
-
-            # 如果目标没有 data 目录，先创建
-            if not os.path.exists(target_data):
-                os.makedirs(target_data, exist_ok=True)
 
             # 复制 data 目录
             print(f"正在复制 data 目录...")

@@ -17,7 +17,6 @@ class STVersionManager:
 
     def fetch_st_versions(self):
         """从本地Git仓库获取SillyTavern版本列表"""
-        from git_utils import get_st_tags
         try:
             success, tags_data, message = get_st_tags(self.st_dir)
             if success:
@@ -44,7 +43,6 @@ class STVersionManager:
 
     def update_remote_tags(self):
         """从远程仓库获取最新tags"""
-        from git_utils import fetch_remote_tags
         try:
             success, message = fetch_remote_tags(self.st_dir)
             return {'success': success, 'message': message}
@@ -83,7 +81,18 @@ class STVersionManager:
     def format_version_list(self, versions, latest_version, limit=20):
         """格式化版本列表用于显示"""
         formatted = []
-        sorted_versions = sorted(versions.items(), reverse=True)[:limit]
+
+        def _version_sort_key(item):
+            ver = item[0].lstrip('v')
+            parts = []
+            for p in ver.split('.'):
+                try:
+                    parts.append(int(p))
+                except ValueError:
+                    parts.append(0)
+            return tuple(parts)
+
+        sorted_versions = sorted(versions.items(), key=_version_sort_key, reverse=True)[:limit]
 
         for ver_str, ver_data in sorted_versions:
             commit = ver_data.get('commit', '')[:7]
@@ -95,7 +104,7 @@ class STVersionManager:
                 if date_str:
                     dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
                     date_str = dt.strftime('%Y-%m-%d')
-            except:
+            except (ValueError, TypeError):
                 pass
 
             latest_mark = " [最新]" if is_latest else ""

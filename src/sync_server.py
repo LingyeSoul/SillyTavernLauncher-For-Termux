@@ -14,6 +14,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_file, Response
 import threading
 import time
+from utils.sync_common import find_data_path, validate_safe_path
 
 
 class SyncServer:
@@ -29,7 +30,7 @@ class SyncServer:
         self.app = Flask(__name__)
         self.port = port
         self.host = host
-        self.data_path = data_path or self._find_data_path()
+        self.data_path = data_path or find_data_path()
         self.running = False
         self.server_thread = None
 
@@ -42,26 +43,6 @@ class SyncServer:
         print(f"监听地址: {host}:{port}")
 
         self._setup_routes()
-
-    def _find_data_path(self):
-        """Auto-detect SillyTavern data path"""
-        # Common SillyTavern data locations
-        possible_paths = [
-            os.path.join(os.getcwd(), "SillyTavern", "data", "default-user"),
-            os.path.join(os.getcwd(), "data", "default-user"),
-            os.path.expanduser("~/SillyTavern/data/default-user"),
-            "./SillyTavern/data/default-user"
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path):
-                print(f"自动检测到数据目录: {path}")
-                return path
-
-        # Fallback to current directory structure
-        default_path = os.path.join(os.getcwd(), "SillyTavern", "data", "default-user")
-        print(f"未找到数据目录，使用默认路径: {default_path}")
-        return default_path
 
     def _setup_routes(self):
         """Setup Flask routes"""
@@ -121,8 +102,12 @@ class SyncServer:
 
             try:
                 # Security check - prevent directory traversal
-                file_path = os.path.normpath(file_path).replace('..', '')
-                full_path = os.path.join(self.data_path, file_path)
+                full_path = validate_safe_path(self.data_path, file_path)
+                if full_path is None:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Invalid path'
+                    }), 403
 
                 if not os.path.exists(full_path):
                     return jsonify({
@@ -239,8 +224,10 @@ class SyncServer:
             return
 
         def run_server():
+            from werkzeug.serving import make_server
             print(f"启动数据同步服务...")
-            self.app.run(host=self.host, port=self.port, debug=False)
+            self._server = make_server(self.host, self.port, self.app)
+            self._server.serve_forever()
 
         if block:
             self.running = True
@@ -261,6 +248,8 @@ class SyncServer:
         """Stop the sync server"""
         if self.running:
             self.running = False
+            if hasattr(self, '_server'):
+                self._server.shutdown()
             print("数据同步服务已停止")
 
 

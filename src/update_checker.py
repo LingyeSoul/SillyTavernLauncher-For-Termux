@@ -4,7 +4,6 @@ SillyTavernLauncher 更新检查器
 """
 import asyncio
 import aiohttp
-import re
 import threading
 
 from utils import MirrorBuilder
@@ -70,18 +69,10 @@ class UpdateChecker:
         Returns:
             如果是开发版则返回True，否则返回False
         """
-        # 开发版标识：包含 "dev", "alpha", "beta", "rc", "test"
-        dev_patterns = [
-            r'dev', r'DEV', r'Dev',
-            r'alpha', r'ALPHA', r'Alpha',
-            r'beta', r'Beta', r'BETA',
-            r'rc', r'RC',
-            r'test', r'Test', r'TEST'
-        ]
-
-        import re
-        for pattern in dev_patterns:
-            if re.search(pattern, version_str):
+        dev_keywords = ['dev', 'alpha', 'beta', 'rc', 'test']
+        version_lower = version_str.lower()
+        for keyword in dev_keywords:
+            if keyword in version_lower:
                 return True
         return False
 
@@ -102,8 +93,8 @@ class UpdateChecker:
             return 0
 
         # 移除版本号中的前缀"v"
-        local_clean = local_version.replace("v", "")
-        remote_clean = remote_version.replace("v", "")
+        local_clean = local_version.lstrip("v")
+        remote_clean = remote_version.lstrip("v")
 
         # 分离版本号
         local_nums = [int(x) for x in local_clean.split(".") if x.isdigit()]
@@ -192,7 +183,6 @@ class UpdateChecker:
             finally:
                 loop.close()
 
-        import threading
         result = [None]
         def worker():
             result[0] = run_loop()

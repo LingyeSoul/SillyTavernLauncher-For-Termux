@@ -11,7 +11,7 @@ class ConfigManager:
             config_path (str, optional): 配置文件路径，默认为当前目录下的config.json
         """
         if config_path is None:
-            self.config_path = os.path.join(os.getcwd(), "config.json")
+            self.config_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config.json"))
         else:
             self.config_path = config_path
         self.default_config = {
@@ -60,6 +60,7 @@ class ConfigManager:
                 return json.load(f)
         except Exception as e:
             # 如果读取失败，返回默认配置
+            print(f"警告: 读取配置文件失败，使用默认配置: {e}")
             return self.default_config
     
     def save_config(self, config_data=None):
