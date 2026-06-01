@@ -221,21 +221,35 @@ class SyncServer:
         """Start the sync server"""
         if self.running:
             print("数据同步服务已在运行")
-            return
+            return True
+
+        ready = threading.Event()
+        self._start_error = None
 
         def run_server():
             from werkzeug.serving import make_server
-            print(f"启动数据同步服务...")
-            self._server = make_server(self.host, self.port, self.app)
-            self._server.serve_forever()
+            try:
+                self._server = make_server(self.host, self.port, self.app)
+                ready.set()
+                self._server.serve_forever()
+            except Exception as e:
+                self._start_error = e
+                self.running = False
+                ready.set()
 
         if block:
             self.running = True
             run_server()
         else:
             self.server_thread = threading.Thread(target=run_server, daemon=True)
-            self.server_thread.start()
             self.running = True
+            self.server_thread.start()
+            ready.wait(timeout=10)
+            if self._start_error:
+                err = self._start_error
+                self._start_error = None
+                print(f"启动数据同步服务失败: {err}")
+                return False
             print(f"数据同步服务已启动在后台: http://{self.host}:{self.port}")
             print("可用接口:")
             print("  GET /health      - 健康检查")
@@ -243,14 +257,19 @@ class SyncServer:
             print("  GET /zip         - 下载所有数据(ZIP)")
             print("  GET /file?path=  - 下载指定文件")
             print("  GET /info        - 服务器信息")
+        return True
 
     def stop(self):
         """Stop the sync server"""
         if self.running:
             self.running = False
             if hasattr(self, '_server'):
-                self._server.shutdown()
+                try:
+                    self._server.shutdown()
+                except Exception:
+                    pass
             print("数据同步服务已停止")
+        return True
 
 
 def main():

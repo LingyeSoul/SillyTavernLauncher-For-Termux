@@ -97,7 +97,7 @@ class TermuxSyncManager:
         return "127.0.0.1"
 
     
-    def start_sync_server(self, port=5000, host='0.0.0.0'):
+    def start_sync_server(self, port=9999, host='0.0.0.0'):
         """Start sync server on Termux"""
         print("启动 Termux 数据同步服务...")
 
@@ -108,20 +108,22 @@ class TermuxSyncManager:
 
         try:
             # Initialize sync server
-            sync_server = SyncServer(
+            self.sync_server = SyncServer(
                 data_path=self.data_dir,
                 port=port,
                 host=host
             )
 
-            # Save configuration
+            # Start server (returns False if port bind fails)
+            if not self.sync_server.start(block=False):
+                self.sync_server = None
+                return False
+
+            # Save configuration only after successful start
             self.config_manager.set("sync.enabled", True)
             self.config_manager.set("sync.port", port)
             self.config_manager.set("sync.host", host)
             self.config_manager.save_config()
-
-            # Start server
-            sync_server.start(block=False)
 
             # Get local IP
             local_ip = self._get_local_ip()
@@ -140,13 +142,17 @@ class TermuxSyncManager:
 
         except Exception as e:
             print(f"启动同步服务器失败: {e}")
+            self.sync_server = None
             return False
 
     def stop_sync_server(self):
         """Stop sync server"""
+        if hasattr(self, 'sync_server') and self.sync_server and self.sync_server.running:
+            self.sync_server.stop()
+            self.sync_server = None
         self.config_manager.set("sync.enabled", False)
         self.config_manager.save_config()
-        print("数据同步服务已停止 (需要重启启动器)")
+        print("数据同步服务已停止")
 
     def sync_from_custom_server(self, server_url, method='auto', backup=True):
         """Sync from custom server URL"""
@@ -165,7 +171,7 @@ class TermuxSyncManager:
         print("数据同步状态:")
 
         sync_enabled = self.config_manager.get("sync.enabled", False)
-        sync_port = self.config_manager.get("sync.port", 5000)
+        sync_port = self.config_manager.get("sync.port", 9999)
         sync_host = self.config_manager.get("sync.host", "0.0.0.0")
 
         print(f"  同步服务状态: {'启用' if sync_enabled else '禁用'}")
@@ -181,7 +187,7 @@ class TermuxSyncManager:
                 local_ip = s.getsockname()[0]
                 s.close()
                 print(f"  客户端地址: http://{local_ip}:{sync_port}")
-            except:
+            except Exception:
                 print(f"  客户端地址: http://localhost:{sync_port}")
 
         # Check data directory size and file count
@@ -214,7 +220,7 @@ def main():
     
     # Start server command
     start_parser = subparsers.add_parser('start', help='启动同步服务器')
-    start_parser.add_argument('--port', type=int, default=5000, help='服务器端口')
+    start_parser.add_argument('--port', type=int, default=9999, help='服务器端口')
     start_parser.add_argument('--host', default='0.0.0.0', help='服务器主机地址')
 
     # Stop server command

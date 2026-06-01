@@ -767,6 +767,7 @@ class SillyTavernCliLauncher:
 
         except Exception as e:
             print(f"启动同步服务器失败: {e}")
+            self.sync_server = None
             return False
 
     def get_sync_server_status(self):

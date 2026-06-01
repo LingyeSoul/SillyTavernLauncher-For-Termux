@@ -380,8 +380,10 @@ class SyncClient:
                     print(f"跳过不安全路径: {file}")
                     continue
 
-                # Extract file
-                zip_file.extract(file, extract_path)
+                # Extract file to validated target path
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zip_file.open(file) as src, open(target, 'wb') as dst:
+                    dst.write(src.read())
 
                 # Show progress for large archives
                 if total_files > 10 and i % max(1, total_files // 10) == 0:
