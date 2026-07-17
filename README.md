@@ -54,8 +54,16 @@ source <(curl -s https://gh-proxy.org/https://raw.githubusercontent.com/LingyeSo
 - `st set-mirror --mirror <mirror>` - 设置 GitHub 镜像
 - `st sync start` - 启动数据同步服务器
 - `st sync stop` - 停止数据同步服务器
-- `st sync from --server-url <URL>` - 从服务器同步数据
+- `st sync info` - 显示同步状态和当前分享地址
+- `st sync rotate-token` - 轮换同步认证令牌，使旧分享地址立即失效
+- `st sync from --server-url <分享URL>` - 从服务器同步数据
 - `st sync menu` - 进入数据同步菜单
+
+同步服务器启动后会显示形如 `http://192.168.1.10:9999#token=...` 的分享地址。令牌放在 URL fragment 中，不会进入 HTTP 请求日志；除 `/health` 外的接口都要求该令牌。请将完整分享地址传给另一台设备：
+
+```bash
+st sync from --server-url 'http://192.168.1.10:9999#token=...'
+```
 
 ### 一键启动功能
 

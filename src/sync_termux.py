@@ -6,10 +6,7 @@ Termux-specific synchronization utilities and commands
 
 import os
 import sys
-import json
-import subprocess
 import argparse
-from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,7 +14,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sync_client import SyncClient
 from sync_server import SyncServer
 from config import ConfigManager
-from utils.sync_common import format_size
+from utils.sync_common import (
+    ALL_INTERFACES,
+    build_share_url,
+    format_size,
+    redact_share_url,
+)
 
 
 class TermuxSyncManager:
@@ -97,7 +99,7 @@ class TermuxSyncManager:
         return "127.0.0.1"
 
     
-    def start_sync_server(self, port=9999, host='0.0.0.0'):
+    def start_sync_server(self, port=9999, host=ALL_INTERFACES):
         """Start sync server on Termux"""
         print("启动 Termux 数据同步服务...")
 
@@ -111,7 +113,8 @@ class TermuxSyncManager:
             self.sync_server = SyncServer(
                 data_path=self.data_dir,
                 port=port,
-                host=host
+                host=host,
+                token_provider=self.config_manager.current_sync_token,
             )
 
             # Start server (returns False if port bind fails)
@@ -128,15 +131,17 @@ class TermuxSyncManager:
             # Get local IP
             local_ip = self._get_local_ip()
 
-            print(f"数据同步服务已启动!")
-            print(f"服务器地址: http://{local_ip}:{port}")
-            print(f"本地地址: http://localhost:{port}")
+            print("数据同步服务已启动!")
+            share_url = self.sync_server.share_url(local_ip)
+            local_share_url = self.sync_server.share_url("127.0.0.1")
+            print(f"分享地址: {share_url}")
+            print(f"本机分享地址: {local_share_url}")
             print(f"数据路径: {self.data_dir}")
 
             # Display commands for other devices
-            print(f"\n其他设备可以使用以下命令同步:")
-            print(f"  st sync from --server-url http://{local_ip}:{port}")
-            print(f"  python sync_termux.py detect-and-sync --server-url http://{local_ip}:{port}")
+            print("\n其他设备可以使用以下命令同步:")
+            print(f"  st sync from --server-url '{share_url}'")
+            print(f"  python sync_termux.py sync '{share_url}'")
 
             return True
 
@@ -156,11 +161,11 @@ class TermuxSyncManager:
 
     def sync_from_custom_server(self, server_url, method='auto', backup=True):
         """Sync from custom server URL"""
-        print(f"从自定义服务器同步: {server_url}")
+        print(f"从自定义服务器同步: {redact_share_url(server_url)}")
 
         try:
             client = SyncClient(server_url, self.data_dir)
-            success = client.sync(prefer_zip=(method == 'auto' or method == 'zip'), backup=backup)
+            success = client.sync(method=method, backup=backup)
             return success
         except Exception as e:
             print(f"同步失败: {e}")
@@ -172,7 +177,7 @@ class TermuxSyncManager:
 
         sync_enabled = self.config_manager.get("sync.enabled", False)
         sync_port = self.config_manager.get("sync.port", 9999)
-        sync_host = self.config_manager.get("sync.host", "0.0.0.0")
+        sync_host = self.config_manager.get("sync.host", ALL_INTERFACES)
 
         print(f"  同步服务状态: {'启用' if sync_enabled else '禁用'}")
         print(f"  监听主机: {sync_host}")
@@ -186,9 +191,15 @@ class TermuxSyncManager:
                 s.connect(("8.8.8.8", 80))
                 local_ip = s.getsockname()[0]
                 s.close()
-                print(f"  客户端地址: http://{local_ip}:{sync_port}")
+                print(
+                    "  分享地址: "
+                    f"{build_share_url(local_ip, sync_port, self.config_manager.current_sync_token())}"
+                )
             except Exception:
-                print(f"  客户端地址: http://localhost:{sync_port}")
+                print(
+                    "  分享地址: "
+                    f"{build_share_url('127.0.0.1', sync_port, self.config_manager.current_sync_token())}"
+                )
 
         # Check data directory size and file count
         if os.path.exists(self.data_dir):
@@ -206,7 +217,7 @@ class TermuxSyncManager:
             print(f"  数据大小: {self._format_size(total_size)}")
             print(f"  文件数量: {file_count}")
         else:
-            print(f"  数据目录: 不存在")
+            print("  数据目录: 不存在")
 
     def _format_size(self, size_bytes):
         return format_size(size_bytes)
@@ -221,14 +232,17 @@ def main():
     # Start server command
     start_parser = subparsers.add_parser('start', help='启动同步服务器')
     start_parser.add_argument('--port', type=int, default=9999, help='服务器端口')
-    start_parser.add_argument('--host', default='0.0.0.0', help='服务器主机地址')
+    start_parser.add_argument('--host', default=ALL_INTERFACES, help='服务器主机地址')
 
     # Stop server command
     subparsers.add_parser('stop', help='停止同步服务器')
 
     # Sync from custom server
     sync_parser = subparsers.add_parser('sync', help='从指定服务器同步数据')
-    sync_parser.add_argument('server_url', help='服务器地址 (例如: 192.168.1.100:5000)')
+    sync_parser.add_argument(
+        'server_url',
+        help='服务器分享地址 (例如: http://192.168.1.100:9999#token=...)',
+    )
     sync_parser.add_argument('--method', choices=['auto', 'zip', 'incremental'],
                            default='auto', help='同步方法')
     sync_parser.add_argument('--no-backup', action='store_true', help='同步时不备份现有数据')

@@ -2,6 +2,7 @@ import argparse
 import os
 import subprocess
 import shutil
+import signal
 import sys
 import threading
 import socket
@@ -18,7 +19,15 @@ from update_checker import UpdateChecker
 from st_migrator import STMigrator
 from version import version as current_version
 from utils import MirrorBuilder
-from utils.sync_common import format_size
+from utils.sync_common import (
+    ALL_INTERFACES,
+    build_share_url,
+    format_size,
+    redact_share_url,
+    recorded_process_is_running,
+    stop_recorded_process,
+    write_pid_record,
+)
 
 
 class SillyTavernCliLauncher:
@@ -719,9 +728,33 @@ class SillyTavernCliLauncher:
 
         return True
 
-    def start_sync_server(self, port=None, host="0.0.0.0"):
+    def _sync_pid_file(self):
+        return os.path.join(
+            os.path.dirname(os.path.abspath(self.config_manager.config_path)),
+            ".sync-server.json",
+        )
+
+    def _sync_share_url(self, host=None, port=None):
+        public_host = host or self._get_local_ip()
+        selected_port = port or self.config_manager.get("sync.port", 9999)
+        return build_share_url(
+            public_host,
+            selected_port,
+            self.config_manager.current_sync_token(),
+        )
+
+    def start_sync_server(self, port=None, host=ALL_INTERFACES, block=False):
         """启动数据同步服务器"""
         try:
+            if self.sync_server is not None and self.sync_server.running:
+                print("数据同步服务已在当前进程中运行")
+                return True
+            if recorded_process_is_running(
+                self._sync_pid_file(), sys.executable, __file__
+            ):
+                print("数据同步服务已在另一个进程中运行")
+                return True
+
             # Import sync_server module
             from sync_server import SyncServer
 
@@ -736,43 +769,70 @@ class SillyTavernCliLauncher:
                 port = self.config_manager.get("sync.port", 9999)
 
             # Initialize sync server
-            self.sync_server = SyncServer(data_path=data_path, port=port, host=host)
+            self.sync_server = SyncServer(
+                data_path=data_path,
+                port=port,
+                host=host,
+                token_provider=self.config_manager.current_sync_token,
+            )
 
-            # Start server in background
-            if self.sync_server.start(block=False):
-                # Get local IP address for client connections
-                local_ip = self._get_local_ip()
-                print(f"数据同步服务已启动!")
-                print(f"服务器地址: http://{local_ip}:{port}")
-                print(f"本地地址: http://localhost:{port}")
-                print(f"数据路径: {data_path}")
-                print("\n可用接口:")
-                print("  /manifest    - 获取文件清单")
-                print("  /zip         - 下载所有数据(ZIP)")
-                print("  /file?path=  - 下载指定文件")
-                print("  /health      - 健康检查")
-                print("  /info        - 服务器信息")
+            # 构造函数已经完成端口绑定，保存配置不会留下“启动成功”的假状态。
+            self.config_manager.set("sync.enabled", True)
+            self.config_manager.set("sync.port", port)
+            self.config_manager.set("sync.host", host)
+            self.config_manager.save_config()
 
-                # Save sync server config only after successful start
-                self.config_manager.set("sync.enabled", True)
-                self.config_manager.set("sync.port", port)
-                self.config_manager.set("sync.host", host)
-                self.config_manager.save_config()
+            local_ip = self._get_local_ip()
+            print("数据同步服务已启动!")
+            print(f"分享地址: {self.sync_server.share_url(local_ip)}")
+            print(f"本机分享地址: {self.sync_server.share_url('127.0.0.1')}")
+            print(f"数据路径: {data_path}")
+            print("提示: 除 /health 外，所有同步接口都需要分享地址中的令牌。")
 
-                return True
-            else:
-                print("启动同步服务器失败")
+            if not block:
+                return self.sync_server.start(block=False)
+
+            pid_file = self._sync_pid_file()
+            write_pid_record(pid_file, os.getpid(), sys.executable, __file__)
+            previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+            def terminate_server(_signum, _frame):
+                raise KeyboardInterrupt
+
+            signal.signal(signal.SIGTERM, terminate_server)
+            try:
+                self.sync_server.start(block=True)
+            except KeyboardInterrupt:
+                print("\n正在停止同步服务器...")
+            finally:
+                try:
+                    os.remove(pid_file)
+                except FileNotFoundError:
+                    pass
                 self.sync_server = None
-                return False
+                self.config_manager.set("sync.enabled", False)
+                self.config_manager.save_config()
+                signal.signal(signal.SIGTERM, previous_sigterm)
+            return True
 
         except Exception as e:
             print(f"启动同步服务器失败: {e}")
+            if self.sync_server is not None:
+                self.sync_server.stop()
             self.sync_server = None
+            self.config_manager.set("sync.enabled", False)
+            self.config_manager.save_config()
             return False
 
     def get_sync_server_status(self):
         """获取同步服务器的真实状态"""
-        is_running = self.sync_server is not None and self.sync_server.running
+        local_running = self.sync_server is not None and self.sync_server.running
+        external_running = False
+        if not local_running:
+            external_running = recorded_process_is_running(
+                self._sync_pid_file(), sys.executable, __file__
+            )
+        is_running = local_running or external_running
         config_enabled = self.config_manager.get("sync.enabled", False)
 
         return {
@@ -780,7 +840,8 @@ class SillyTavernCliLauncher:
             "config_enabled": config_enabled,
             "consistent": is_running == config_enabled,
             "port": self.config_manager.get("sync.port", 9999),
-            "host": self.config_manager.get("sync.host", "0.0.0.0"),
+            "host": self.config_manager.get("sync.host", ALL_INTERFACES),
+            "external": external_running,
         }
 
     def sync_config_with_actual_state(self):
@@ -794,14 +855,30 @@ class SillyTavernCliLauncher:
 
     def stop_sync_server(self):
         """停止数据同步服务器"""
+        stopped = False
         if self.sync_server and self.sync_server.running:
             self.sync_server.stop()
             self.sync_server = None
-            self.config_manager.set("sync.enabled", False)
-            self.config_manager.save_config()
+            stopped = True
+        else:
+            stopped = stop_recorded_process(
+                self._sync_pid_file(), sys.executable, __file__
+            )
+        self.config_manager.set("sync.enabled", False)
+        self.config_manager.save_config()
+        if stopped:
             print("数据同步服务已停止")
         else:
             print("数据同步服务未运行")
+        return stopped
+
+    def rotate_sync_token(self):
+        """轮换同步令牌；运行中的服务器会在下一次请求时立即生效。"""
+        self.config_manager.rotate_sync_token()
+        share_url = self._sync_share_url()
+        print("同步令牌已轮换，旧分享地址立即失效。")
+        print(f"新分享地址: {share_url}")
+        return share_url
 
     def sync_from_server(self, server_url, method="auto", backup=True):
         """从远程服务器同步数据"""
@@ -830,10 +907,8 @@ class SillyTavernCliLauncher:
                 print(f"  总大小: {format_size(info.get('total_size', 0))}")
 
             # Perform sync
-            print(f"开始从服务器同步: {server_url}")
-            success = client.sync(
-                prefer_zip=(method == "auto" or method == "zip"), backup=backup
-            )
+            print(f"开始从服务器同步: {client.server_url}")
+            success = client.sync(method=method, backup=backup)
 
             if success:
                 print("数据同步完成!")
@@ -866,7 +941,7 @@ class SillyTavernCliLauncher:
 
             client = SyncClient(server_url)
 
-            print(f"\n连接到服务器: {server_url}")
+            print(f"\n连接到服务器: {client.server_url}")
 
             # 获取服务器信息
             server_info = client.get_server_info()
@@ -891,9 +966,7 @@ class SillyTavernCliLauncher:
                 backup_choice = input("是否备份现有数据？(Y/n): ").strip()
                 backup = backup_choice.lower() != "n"
 
-                success = client.sync(
-                    prefer_zip=(method == "auto" or method == "zip"), backup=backup
-                )
+                success = client.sync(method=method, backup=backup)
                 if success:
                     print("同步完成!")
                 else:
@@ -901,6 +974,19 @@ class SillyTavernCliLauncher:
 
         except Exception as e:
             print(f"连接或同步失败: {e}")
+
+    def _check_sync_server(self, server_url):
+        """验证已保存的分享地址能否通过认证并读取服务器信息。"""
+        try:
+            from sync_client import SyncClient
+
+            client = SyncClient(server_url)
+            client.health()
+            client.info()
+            return True
+        except Exception as error:
+            print(f"连接检查失败: {error}")
+            return False
 
     def _manage_saved_servers(self):
         """管理已保存的服务器列表"""
@@ -918,7 +1004,7 @@ class SillyTavernCliLauncher:
                 return
 
             for i, server_url in enumerate(saved_servers, 1):
-                print(f"{i}. {server_url}")
+                print(f"{i}. {redact_share_url(server_url)}")
 
             print("\n选项:")
             print("1. 连接并同步")
@@ -963,7 +1049,7 @@ class SillyTavernCliLauncher:
                             saved_servers
                         ):
                             selected_server = saved_servers[int(server_choice) - 1]
-                            print(f"正在测试连接: {selected_server}")
+                            print(f"正在测试连接: {redact_share_url(selected_server)}")
                             if self._check_sync_server(selected_server):
                                 print("✓ 连接成功!")
                             else:
@@ -983,8 +1069,9 @@ class SillyTavernCliLauncher:
                             saved_servers
                         ):
                             selected_server = saved_servers[int(server_choice) - 1]
+                            display_server = redact_share_url(selected_server)
                             confirm = input(
-                                f"确认删除 '{selected_server}'? (y/N): "
+                                f"确认删除 '{display_server}'? (y/N): "
                             ).strip()
                             if confirm.lower() == "y":
                                 saved_servers.remove(selected_server)
@@ -992,7 +1079,7 @@ class SillyTavernCliLauncher:
                                     "sync.saved_servers", saved_servers
                                 )
                                 self.config_manager.save_config()
-                                print(f"已删除: {selected_server}")
+                                print(f"已删除: {display_server}")
                             else:
                                 print("取消删除")
                         else:
@@ -1043,8 +1130,10 @@ class SillyTavernCliLauncher:
             print(f"当前同步服务器状态: {status_color} {status_text}")
             if status["running"]:
                 local_ip = self._get_local_ip()
-                print(f"服务器地址: http://{local_ip}:{status['port']}")
-                print(f"本地地址: http://localhost:{status['port']}")
+                print(f"分享地址: {self._sync_share_url(local_ip, status['port'])}")
+                print(
+                    f"本机分享地址: {self._sync_share_url('127.0.0.1', status['port'])}"
+                )
             elif status["config_enabled"]:
                 print(f"配置端口: {status['port']}")
                 print("注意: 配置显示启用，但服务器实际未运行")
@@ -1052,16 +1141,17 @@ class SillyTavernCliLauncher:
             print("\n选项:")
             print("1. 启动同步服务器")
             print("2. 停止同步服务器")
-            print("3. 从服务器同步数据 (支持 IP:端口 格式)")
+            print("3. 从服务器同步数据 (使用含令牌的分享地址)")
             print("4. 显示同步配置")
-            print("5. 测试服务器连接 (支持 IP:端口 格式)")
+            print("5. 测试服务器连接 (使用含令牌的分享地址)")
             print("6. 设置同步服务器端口")
+            print("7. 轮换同步令牌")
             saved_servers_num = None
             if not status["consistent"]:
-                print("7. 修复状态不一致问题")
-                saved_servers_num = 8
+                print("8. 修复状态不一致问题")
+                saved_servers_num = 9
             else:
-                saved_servers_num = 7
+                saved_servers_num = 8
             saved_servers = self.config_manager.get("sync.saved_servers", [])
             if saved_servers:
                 print(f"{saved_servers_num}. 已保存的服务器列表")
@@ -1069,7 +1159,7 @@ class SillyTavernCliLauncher:
             print("=" * 50)
 
             try:
-                choice = input("请选择操作 [0-8]: ").strip()
+                choice = input("请选择操作 [0-9]: ").strip()
 
                 if choice == "1":
                     if not status["running"]:
@@ -1087,23 +1177,12 @@ class SillyTavernCliLauncher:
                         print("同步服务器未运行")
                 elif choice == "3":
                     server_url = input(
-                        "请输入服务器地址 (例如: 192.168.1.100:5000): "
+                        "请输入分享地址 (例如: http://192.168.1.100:9999#token=...): "
                     ).strip()
                     if server_url:
-                        # 自动处理IP:端口格式
-                        if ":" in server_url and not server_url.startswith(
-                            ("http://", "https://")
-                        ):
-                            ip, port = server_url.split(":", 1)
-                            server_url = f"http://{ip}:{port}"
-                            print(f"连接到服务器: {server_url}")
-                        elif server_url.startswith(("http://", "https://")):
-                            print(f"连接到服务器: {server_url}")
-                        else:
-                            print(
-                                "格式错误，请使用 IP:端口 格式，例如: 192.168.1.100:5000"
-                            )
-                            continue
+                        if not server_url.startswith(("http://", "https://")):
+                            server_url = f"http://{server_url}"
+                        print(f"连接到服务器: {redact_share_url(server_url)}")
 
                         print("请选择同步方法:")
                         print("1. 自动 (优先ZIP，失败后增量)")
@@ -1137,19 +1216,17 @@ class SillyTavernCliLauncher:
                         )
                         print(f"  数据路径: {data_path}")
                         local_ip = self._get_local_ip()
-                        print(f"  客户端地址: http://{local_ip}:{status['port']}")
+                        print(
+                            f"  分享地址: {self._sync_share_url(local_ip, status['port'])}"
+                        )
                 elif choice == "5":
                     server_url = input(
-                        "请输入服务器地址进行测试 (例如: 192.168.1.100:5000): "
+                        "请输入分享地址进行测试 (例如: http://192.168.1.100:9999#token=...): "
                     ).strip()
                     if server_url:
                         try:
-                            # 自动处理IP:端口格式
-                            if ":" in server_url and not server_url.startswith(
-                                ("http://", "https://")
-                            ):
-                                ip, port = server_url.split(":", 1)
-                                server_url = f"http://{ip}:{port}"
+                            if not server_url.startswith(("http://", "https://")):
+                                server_url = f"http://{server_url}"
 
                             from sync_client import SyncClient
 
@@ -1159,13 +1236,15 @@ class SillyTavernCliLauncher:
                                 if server_info:
                                     info = server_info.get("server_info", {})
                                     print("服务器连接正常!")
-                                    print(f"  服务器地址: {server_url}")
+                                    print(f"  服务器地址: {client.server_url}")
                                     print(f"  文件数量: {info.get('file_count', 0)}")
                                     print(
                                         f"  总大小: {format_size(info.get('total_size', 0))}"
                                     )
                             else:
-                                print(f"服务器连接失败: {server_url}")
+                                print(
+                                    f"服务器连接失败: {redact_share_url(server_url)}"
+                                )
                         except Exception as e:
                             print(f"测试连接失败: {e}")
                 elif choice == "6":
@@ -1198,7 +1277,15 @@ class SillyTavernCliLauncher:
                             print("端口未修改")
                     except ValueError:
                         print("错误: 请输入有效的端口号")
-                elif choice == "7" and not status["consistent"]:
+                elif choice == "7":
+                    confirm = input(
+                        "轮换后旧分享地址会立即失效，确认继续？(y/N): "
+                    ).strip()
+                    if confirm.lower() == "y":
+                        self.rotate_sync_token()
+                    else:
+                        print("取消轮换")
+                elif choice == "8" and not status["consistent"]:
                     # 修复状态不一致问题
                     print("正在修复状态不一致问题...")
                     if self.sync_config_with_actual_state():
@@ -1211,7 +1298,7 @@ class SillyTavernCliLauncher:
                 elif choice == "0":
                     break
                 else:
-                    print("无效选择，请输入 0-8 之间的数字")
+                    print("无效选择，请输入 0-9 之间的数字")
 
             except KeyboardInterrupt:
                 print("\n收到退出信号，返回主菜单...")
@@ -2392,7 +2479,7 @@ def main():
     parser.add_argument("subcommand", nargs="?", help="子命令")
     parser.add_argument("--mirror", help="设置GitHub镜像源")
     parser.add_argument("--port", type=int, default=9999, help="同步服务器端口")
-    parser.add_argument("--host", default="0.0.0.0", help="同步服务器主机地址")
+    parser.add_argument("--host", default=ALL_INTERFACES, help="同步服务器主机地址")
     parser.add_argument("--server-url", help="同步源服务器地址")
     parser.add_argument(
         "--method",
@@ -2524,13 +2611,21 @@ def main():
             print("请提供镜像源参数，例如: st set-mirror --mirror gh-proxy.org")
     elif args.command == "sync":
         if args.subcommand == "start":
-            launcher.start_sync_server(args.port, args.host)
+            launcher.start_sync_server(args.port, args.host, block=True)
         elif args.subcommand == "stop":
             launcher.stop_sync_server()
+        elif args.subcommand == "info":
+            status = launcher.get_sync_server_status()
+            print(f"同步服务器状态: {'运行中' if status['running'] else '已停止'}")
+            print(f"监听地址: {status['host']}:{status['port']}")
+            print(f"分享地址: {launcher._sync_share_url(port=status['port'])}")
+        elif args.subcommand == "rotate-token":
+            launcher.rotate_sync_token()
         elif args.subcommand == "from":
             if not args.server_url:
                 print(
-                    "请提供服务器地址，例如: st sync from --server-url http://192.168.1.100:5000"
+                    "请提供分享地址，例如: st sync from --server-url "
+                    "'http://192.168.1.100:9999#token=...'"
                 )
             else:
                 launcher.sync_from_server(
@@ -2542,6 +2637,8 @@ def main():
             print("可用的同步子命令:")
             print("  st sync start           - 启动同步服务器")
             print("  st sync stop            - 停止同步服务器")
+            print("  st sync info            - 显示状态和分享地址")
+            print("  st sync rotate-token    - 轮换同步认证令牌")
             print("  st sync from --server-url <URL>  - 从服务器同步数据")
             print("  st sync menu            - 进入同步菜单")
             print("")
@@ -2555,8 +2652,12 @@ def main():
             print("")
             print("示例:")
             print("  st sync start --port 8080")
-            print("  st sync from --server-url http://192.168.1.100:5000")
-            print("  st sync from --server-url http://192.168.1.100:5000 --method zip")
+            print("  st sync info")
+            print("  st sync from --server-url 'http://192.168.1.100:9999#token=...'")
+            print(
+                "  st sync from --server-url "
+                "'http://192.168.1.100:9999#token=...' --method zip"
+            )
     elif args.command == "version":
         if args.subcommand == "info":
             launcher.show_version_info()

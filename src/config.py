@@ -1,5 +1,9 @@
+import copy
 import json
 import os
+import secrets
+
+from utils.sync_common import ALL_INTERFACES
 
 
 class ConfigManager:
@@ -24,7 +28,7 @@ class ConfigManager:
                 "sync": {
                     "enabled": False,
                     "port": 9999,
-                    "host": "0.0.0.0",
+                    "host": ALL_INTERFACES,
                 },
                 "migration": {
                     "last_migration_time": None,
@@ -39,6 +43,9 @@ class ConfigManager:
                 "agreement_history": []
                 }
         self.config = self.load_config()
+        self._merge_defaults(self.config, self.default_config)
+        if not self.get("sync.token"):
+            self.set("sync.token", secrets.token_urlsafe(24))
         
         
     def load_config(self):
@@ -56,7 +63,7 @@ class ConfigManager:
         
         # 读取现有配置
         try:
-            with open(self.config_path, "r") as f:
+            with open(self.config_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             # 如果读取失败，返回默认配置
@@ -73,11 +80,36 @@ class ConfigManager:
         if config_data is None:
             config_data = self.config
             
+        temp_path = f"{self.config_path}.tmp"
         try:
-            with open(self.config_path, "w") as f:
-                json.dump(config_data, f, indent=4)
+            parent = os.path.dirname(os.path.abspath(self.config_path))
+            os.makedirs(parent, exist_ok=True)
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, ensure_ascii=False, indent=4)
+                f.write("\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(temp_path, 0o600)
+            os.replace(temp_path, self.config_path)
+            os.chmod(self.config_path, 0o600)
         except Exception as e:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
             raise Exception(f"保存配置文件失败: {str(e)}")
+
+    def _merge_defaults(self, current, defaults):
+        """递归补齐缺失配置，同时保留用户已有设置。"""
+        changed = False
+        for key, value in defaults.items():
+            if key not in current:
+                current[key] = copy.deepcopy(value)
+                changed = True
+            elif isinstance(value, dict) and isinstance(current[key], dict):
+                changed = self._merge_defaults(current[key], value) or changed
+        return changed
     
     def get(self, key, default=None):
         """
@@ -135,6 +167,22 @@ class ConfigManager:
         重新加载配置文件
         """
         self.config = self.load_config()
+        self._merge_defaults(self.config, self.default_config)
+
+    def current_sync_token(self):
+        """读取当前同步令牌，使运行中的服务器可即时响应令牌轮换。"""
+        self.reload()
+        token = self.get("sync.token", "")
+        if not isinstance(token, str) or not token:
+            token = self.rotate_sync_token()
+        return token
+
+    def rotate_sync_token(self):
+        """生成并持久化新的高熵同步令牌。"""
+        token = secrets.token_urlsafe(24)
+        self.set("sync.token", token)
+        self.save_config()
+        return token
     
     def _detect_env_type(self):
         """
