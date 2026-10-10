@@ -14,7 +14,8 @@ import { ALL_INTERFACES } from "./sync/common.ts";
 export interface LauncherConfig {
   first_run: boolean;
   github: { mirror: string; custom_mirror_url: string };
-  autostart: boolean;
+  /** st 无参数命令行为：menu=交互菜单 | st=直启 SillyTavern | webui=直启 WebUI（← 旧 autostart 布尔） */
+  startup: "menu" | "st" | "webui";
   sync: {
     enabled: boolean;
     port: number;
@@ -49,7 +50,7 @@ function defaultConfig(): LauncherConfig {
   return {
     first_run: true,
     github: { mirror: "github", custom_mirror_url: "" },
-    autostart: false,
+    startup: "menu",
     sync: { enabled: false, port: 9999, host: ALL_INTERFACES, token: "", saved_servers: [] },
     webui: { enabled: false, port: 8300, host: "127.0.0.1" },
     migration: {
@@ -91,6 +92,7 @@ export class ConfigStore {
     this.configPath = configPath ?? launcherConfigPath();
     this.defaults = defaultConfig();
     this.config = this.load();
+    this.migrateLegacyAutostart();
     if (mergeDefaults(this.config as unknown as Record<string, unknown>, this.defaults as unknown as Record<string, unknown>)) {
       this.save();
     }
@@ -111,6 +113,15 @@ export class ConfigStore {
       process.stderr.write(`警告: 读取配置文件失败，使用默认配置: ${String(error)}\n`);
       return structuredClone(this.defaults);
     }
+  }
+
+  /** 旧版 autostart 布尔迁移为 startup 行为枚举（true→st，false→menu），迁移后移除旧键。 */
+  private migrateLegacyAutostart(): void {
+    const raw = this.config as unknown as Record<string, unknown>;
+    if (!("autostart" in raw)) return;
+    if (!("startup" in raw)) raw.startup = raw.autostart === true ? "st" : "menu";
+    delete raw.autostart;
+    this.save();
   }
 
   private saveData(data: LauncherConfig): void {

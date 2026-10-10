@@ -46,7 +46,8 @@ describe("ConfigStore", () => {
     );
     const store = new ConfigStore(configPath);
     expect(store.get("github.mirror")).toBe("ghproxy"); // 用户设置保留
-    expect(store.get<boolean>("autostart")).toBe(true);
+    expect(store.get("startup")).toBe("st"); // 旧 autostart=true 迁移为 st
+    expect(store.get("autostart", "gone")).toBe("gone"); // 旧键移除
     expect(store.get("sync.port")).toBe(9999); // 默认值补齐
     expect(store.get<string>("webui.port", "")).not.toBe(""); // 新增 webui 默认
   });

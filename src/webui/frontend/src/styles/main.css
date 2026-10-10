@@ -1,0 +1,639 @@
+/* ============================================================
+ * Forge 设计语言 · 全局样式层
+ * 数值契约来自 SoulDesign design-tokens.md（源码实证，禁止凭感觉改）：
+ *   - 背景五级阶梯 / 文本四级 / 边框三级
+ *   - 余烬橙稀缺使用（Scarce Ember）· 边框替代阴影（One-Pixel Frame）
+ *   - 字距全局锁 0（No Shouting）· 机器读数一律 mono（Machine Readings）
+ *   - 动效全部功能性 ≤240ms，尊重 reduced-motion
+ * ============================================================ */
+
+:root {
+  /* 背景五级阶梯 */
+  --bg-deep: #111315;
+  --bg-base: #141618;
+  --bg-surface: #1C1F22;
+  --bg-elevated: #272B2F;
+  --bg-hover: #2C3136;
+  --bg-overlay: #1C1F22;
+
+  /* 文本四级 */
+  --text-primary: #EEF0F2;
+  --text-secondary: #A8AFB6;
+  --text-muted: #929AA3;
+  --text-disabled: #69727B;
+
+  /* 边框三级 */
+  --border-subtle: #2A2E33;
+  --border-default: #383E44;
+  --border-strong: #555F69;
+
+  /* 品牌强调（余烬橙只点关键；teal 只做数据/选中第二语义） */
+  --forge-ember: #EBA375;
+  --forge-teal: #88BDB5;
+  --glow-ember: rgb(235 163 117 / 12%);
+
+  /* 字体（CJK 回退系统字体，不打包中文字库） */
+  --font-sans: "Geist Sans", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* 圆角三档（封顶 8px） */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* 字号 */
+  --fs-h1: 26px;
+  --fs-h3: 16px;
+  --fs-metric: 20px;
+  --fs-caption: 12px;
+  --fs-micro: 11px;
+}
+
+/* ---------- 基底：工作台不滚动，主区内部管滚动 ---------- */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.v-application {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  height: 100dvh;
+}
+
+.v-main {
+  /* 收紧到外壳剩余高度（Vuetify 默认 1 0 auto 会随内容长高，导致内部滚动失效） */
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 签名：字距全局锁 0，含组件库内部类（多语言 CJK 场景同样生效） */
+*,
+*::before,
+*::after {
+  letter-spacing: 0 !important;
+}
+
+/* ---------- 滚动条：6px 细条是工作台气质 ---------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* 键盘焦点：2px 余烬描边（Glow-Is-Feedback） */
+:focus-visible {
+  outline: 2px solid var(--forge-ember);
+  outline-offset: 3px;
+}
+
+/* ---------- 应用骨架 ---------- */
+.stl-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 26px 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 959.98px) {
+  .stl-scroll {
+    max-width: none;
+    padding: 20px 16px calc(84px + env(safe-area-inset-bottom));
+  }
+}
+
+/* 日志页：填满视口由终端内部滚动；极矮视口下降级为页面滚动，保证工具栏可达 */
+.stl-scroll--fill {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ---------- 对话框兜底：任何视口比例下卡片不超屏，按钮永远可达 ---------- */
+.v-dialog > .v-card {
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+.v-dialog > .v-card > .v-card-text {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ---------- 页面骨架 ---------- */
+.workspace-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.workspace-heading h1 {
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.workspace-heading .heading-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 959.98px) {
+  .workspace-heading h1 {
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .workspace-heading {
+    margin-bottom: 20px;
+  }
+}
+
+.workspace-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+/* ---------- Vuetify 组件覆盖 ---------- */
+
+/* tonal 卡 = 主力信息容器：中性阶梯底 + 1px 细边，不用彩色底纹 */
+.v-card--variant-tonal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+}
+.v-card--variant-tonal > .v-card__underlay {
+  opacity: 0;
+}
+
+.v-card {
+  border-radius: var(--radius-md);
+}
+.v-card__title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 按钮不大写、不高、按下下沉 1px 的机械感 */
+.v-btn {
+  border-radius: var(--radius-sm) !important;
+  text-transform: none;
+  font-weight: 500;
+}
+.v-btn:not(.v-btn--icon):not(.v-btn--block) {
+  min-height: 34px;
+}
+.v-btn:active {
+  transform: translateY(1px);
+}
+
+/* 字段：4px 圆角，聚焦用辉光环而非边框变色 */
+.v-field {
+  --v-field-border-opacity: 0.28;
+  border-radius: var(--radius-sm);
+  transition: box-shadow 0.16s ease;
+}
+.v-field--focused {
+  box-shadow: 0 0 0 3px var(--glow-ember);
+}
+
+/* 栅格保命：长 mono 文本不撑破 flex 子项 */
+.v-col {
+  min-width: 0;
+}
+
+/* 等宽场景：路径 / 地址 / 命令行 / 读数 */
+.font-mono-field {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ---------- 导航（Forge 签名：激活三件套） ---------- */
+.workspace-nav {
+  background: var(--bg-deep) !important;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 80px;
+  padding: 0 20px;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--bg-elevated);
+  color: var(--forge-ember);
+  flex: none;
+}
+
+.brand-mark--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.brand-name {
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.brand-sub {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.nav-group-label {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 8px 24px;
+}
+.nav-group-label:first-child {
+  padding-top: 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 38px;
+  margin: 0 8px 3px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+  width: calc(100% - 16px);
+  text-align: left;
+}
+.nav-item .v-icon {
+  opacity: 0.85;
+}
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--forge-ember);
+}
+/* 激活三件套：橙字 + 12% 余烬底 + inset 2px 橙条，缺一不可 */
+.nav-item--active {
+  color: var(--forge-ember);
+  background: var(--glow-ember);
+  box-shadow: inset 2px 0 var(--forge-ember);
+}
+
+.nav-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+/* ---------- 顶栏 ---------- */
+.workspace-topbar {
+  background: var(--bg-base) !important;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 16px;
+  min-width: 0;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.topbar-title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 引擎徽章：mono 10px + 1px 边框 + 3px 圆角芯片 */
+.engine-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.status-chip {
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 2px;
+  display: inline-block;
+}
+
+@media (max-width: 959.98px) {
+  .engine-badge {
+    display: none;
+  }
+}
+
+/* ---------- 移动底栏（激活三件套的竖向变体） ---------- */
+.stl-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1004;
+  display: flex;
+  height: calc(64px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg-deep);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stl-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--fs-micro);
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.stl-tab--active {
+  color: var(--forge-ember);
+  background: var(--glow-ember);
+  box-shadow: inset 0 2px 0 var(--forge-ember);
+}
+
+/* ---------- 指标瓦片（签名原子） ---------- */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+}
+
+.metric-tile {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.metric-label {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-metric);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.metric-value--sm {
+  font-size: 14px;
+}
+
+.metric-hint {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ---------- 日志终端 ---------- */
+.log-console {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  overflow-y: auto;
+  flex: 1 1 0;
+  min-height: 240px;
+}
+
+.log-line {
+  padding: 1px 0;
+  color: var(--text-secondary);
+  animation: logEntry 0.2s ease-out both;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.log-line .log-time {
+  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  margin-right: 8px;
+}
+
+.log-line .log-tag {
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+.log-info {
+  color: var(--text-primary);
+}
+.log-warn {
+  color: #E3BC75;
+}
+.log-error {
+  color: #F18C96;
+  font-weight: 500;
+}
+.log-ok {
+  color: #89C5A2;
+}
+
+.sse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-default);
+  flex: none;
+}
+.sse-dot--on {
+  background: #89C5A2;
+}
+
+/* ---------- 空状态：72px 描边方块标牌，不是裸文本 ---------- */
+.stl-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.empty-mark {
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 420px;
+}
+
+/* ---------- 骨架屏：与真实布局同构，不用 spinner ---------- */
+.skeleton-block {
+  border-radius: var(--radius-sm);
+  min-height: 16px;
+  background: var(--bg-elevated);
+  animation: shimmer 1.5s ease infinite;
+}
+
+.skeleton-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* ---------- 页面过渡：240ms fadeSlideUp（GSAP 规格的 CSS 等价实现） ---------- */
+.page-enter-active {
+  transition: opacity 0.24s ease-out, transform 0.24s ease-out;
+}
+.page-leave-active {
+  transition: opacity 0.16s ease-in;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.page-leave-to {
+  opacity: 0;
+}
+
+/* ---------- 关键帧库（位移刻意小：进入 6px / 日志 4px / 抖动 ±3px） ---------- */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes shimmer {
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes shake {
+  20%,
+  60% {
+    transform: translateX(-3px);
+  }
+  40%,
+  80% {
+    transform: translateX(3px);
+  }
+}
+@keyframes logEntry {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.anim-fade-up {
+  animation: fadeSlideUp 0.24s ease-out both;
+}
+
+/* ---------- reduced-motion：CSS 一刀切归零 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -17,3 +17,6 @@ __pycache__/
 /backup
 /.sisyphus
 /agreement_cache.json
+
+# WEBUI frontend build artifacts (built on device by install script / launcher self-update)
+/src/webui/public/

@@ -73,8 +73,8 @@ async function showMenu(): Promise<void> {
     process.stdout.write("1. 安装 SillyTavern\n");
     process.stdout.write("2. 启动 SillyTavern\n");
     process.stdout.write("3. 显示配置\n");
-    process.stdout.write("4. 启用一键启动\n");
-    process.stdout.write("5. 禁用一键启动\n");
+    process.stdout.write("4. st 命令行为 → 一键启动酒馆\n");
+    process.stdout.write("5. st 命令行为 → 显示菜单\n");
     process.stdout.write("6. 更新 SillyTavern\n");
     process.stdout.write("7. 更新启动器\n");
     process.stdout.write("8. 设置 GitHub 镜像\n");
@@ -103,13 +103,13 @@ async function showMenu(): Promise<void> {
         const cfg = new StConfig();
         process.stdout.write(`ST 端口: ${cfg.state.port} | 监听: ${cfg.state.listen ? "所有地址" : "本机"}\n`);
       } else if (choice === "4") {
-        store.set("autostart", true);
+        store.set("startup", "st");
         store.save();
-        process.stdout.write("已启用一键启动功能，输入 st 将直接启动SillyTavern\n");
+        process.stdout.write("已设置: 输入 st 将直接启动 SillyTavern\n");
       } else if (choice === "5") {
-        store.set("autostart", false);
+        store.set("startup", "menu");
         store.save();
-        process.stdout.write("已禁用一键启动功能，输入 st 将显示菜单\n");
+        process.stdout.write("已设置: 输入 st 将显示菜单\n");
       } else if (choice === "6") {
         const result = await updateSillytavern();
         process.stdout.write(`${result.ok ? "✓" : "✗"} ${result.message}\n`);
@@ -401,13 +401,16 @@ function usage(): void {
 用法: st [命令]
 
 命令:
-  (无命令)        一键启动（未启用时进入菜单）
+  (无命令)        按 startup 行为执行（默认进入菜单）
   install         安装 SillyTavern
   start|launch    启动 SillyTavern（前台）
   menu            进入交互菜单
   webui           启动 WebUI 管理界面
   config          显示配置
+  startup <menu|st|webui>
+                  输入 st 无参数时的行为（menu=菜单, st=一键启动酒馆, webui=一键启动 WebUI）
   autostart <enable|disable>
+                  兼容旧命令：enable=startup st, disable=startup menu
   update <st|stl> 更新 SillyTavern / 启动器
   set-mirror <mirror>
   sync <start|stop|info|rotate-token|from|menu> [--port N] [--server-url URL]
@@ -415,6 +418,14 @@ function usage(): void {
   st-config <port|listen> [--st-port N] [--enable-listen | --disable-listen]
   migrate <scan|from> [--source-path P] [--mode M]
 `);
+}
+
+/** WebUI 前台运行（startup=webui 与 st webui 共用）。 */
+async function runWebuiForeground(port?: number): Promise<number> {
+  const { url } = await startWebui({ port });
+  process.stdout.write(`WEBUI 已启动: ${url}\n按 Ctrl+C 停止。\n`);
+  await new Promise(() => {});
+  return 0;
 }
 
 async function main(): Promise<number> {
@@ -437,10 +448,14 @@ async function main(): Promise<number> {
 
   const command = args[0] && !args[0].startsWith("--") ? args[0] : "";
 
-  // 无命令：autostart 直启，否则菜单
+  // 无命令：按 startup 行为执行（st=直启酒馆，webui=直启 WebUI，默认菜单）
   if (!command) {
-    if (store.get<boolean>("autostart", false)) {
+    const startup = store.get<string>("startup", "menu");
+    if (startup === "st") {
       return await startForeground();
+    }
+    if (startup === "webui") {
+      return await runWebuiForeground(findFlag("--port") ? Number(findFlag("--port")) : undefined);
     }
     await showMenu();
     return 0;
@@ -456,21 +471,29 @@ async function main(): Promise<number> {
     case "menu":
       await showMenu();
       return 0;
-    case "webui": {
-      const { url } = await startWebui({ port: findFlag("--port") ? Number(findFlag("--port")) : undefined });
-      process.stdout.write(`WEBUI 已启动: ${url}\n按 Ctrl+C 停止。\n`);
-      await new Promise(() => {});
-      return 0;
-    }
+    case "webui":
+      return await runWebuiForeground(findFlag("--port") ? Number(findFlag("--port")) : undefined);
     case "config":
       process.stdout.write(JSON.stringify(store.snapshot(), null, 2) + "\n");
       return 0;
+    case "startup": {
+      const sub = args[args.indexOf(command) + 1];
+      if (sub === "menu" || sub === "st" || sub === "webui") {
+        store.set("startup", sub);
+        store.save();
+        const labels = { menu: "显示菜单", st: "一键启动酒馆", webui: "一键启动 WebUI" } as const;
+        process.stdout.write(`已设置 st 命令行为: ${labels[sub]}\n`);
+        return 0;
+      }
+      process.stdout.write("请指定 menu | st | webui\n");
+      return 1;
+    }
     case "autostart": {
       const sub = args[args.indexOf(command) + 1];
       if (sub === "enable" || sub === "disable") {
-        store.set("autostart", sub === "enable");
+        store.set("startup", sub === "enable" ? "st" : "menu");
         store.save();
-        process.stdout.write(sub === "enable" ? "已启用一键启动功能\n" : "已禁用一键启动功能\n");
+        process.stdout.write(sub === "enable" ? "已启用一键启动功能（startup=st）\n" : "已禁用一键启动功能（startup=menu）\n");
         return 0;
       }
       process.stdout.write("请指定 enable 或 disable\n");

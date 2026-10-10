@@ -5,20 +5,32 @@
   "type": "module",
   "private": true,
   "engines": {
-    "node": ">=22.6.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "start": "node --experimental-strip-types src/cli.ts",
     "webui": "node --experimental-strip-types src/webui.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:webui": "vue-tsc --noEmit -p src/webui/frontend/tsconfig.json",
+    "build:webui": "vite build -c src/webui/frontend/vite.config.ts",
+    "dev:webui": "vite dev -c src/webui/frontend/vite.config.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@fontsource/geist-sans": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@mdi/js": "^7.4.47",
     "@types/node": "^22.10.0",
+    "@vitejs/plugin-vue": "^6.0.9",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vite": "^7.3.7",
+    "vite-plugin-vuetify": "^2.1.3",
+    "vitest": "^3.2.4",
+    "vue": "^3.5.43",
+    "vue-tsc": "^3.3.12",
+    "vuetify": "^4.2.4"
   }
 }

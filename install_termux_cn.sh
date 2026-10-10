@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SillyTavernLauncher for Termux - 安装脚本 (中国大陆优化版, Node.js/TypeScript)
-# 依赖: nodejs-lts (>= 22.6) + git，不再需要 Python
+# 依赖: nodejs-lts (>= 22.12) + git，不再需要 Python
 #
 # 使用方法:
 #   bash install_termux_cn.sh           # 使用默认 gh-proxy.org 镜像
@@ -53,11 +53,11 @@ pkg update -y
 echo "正在安装必要的包..."
 pkg install -y nodejs-lts git
 
-# 检查 Node 版本 (>= 22.6)
+# 检查 Node 版本 (>= 22.12，需要原生 TypeScript 支持与 Vite 7 构建链)
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 NODE_MINOR=$(node -p 'process.versions.node.split(".")[1]')
-if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 6 ]; }; then
-    echo "错误: 需要 Node.js >= 22.6 (当前 $(node -v))"
+if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 12 ]; }; then
+    echo "错误: 需要 Node.js >= 22.12 (当前 $(node -v))"
     exit 1
 fi
 
@@ -97,11 +97,19 @@ else
     fi
 fi
 
-# 安装依赖（使用 npmmirror 国内镜像）
+# 安装依赖（使用 npmmirror 国内镜像，含 WEBUI 前端构建工具链，运行时仍零依赖）
 echo "正在安装 Node.js 依赖 (npmmirror 镜像)..."
-npm install --omit=dev --no-audit --no-fund --registry=https://registry.npmmirror.com
+npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
 if [ $? -ne 0 ]; then
     echo "错误: 依赖安装失败"
+    exit 1
+fi
+
+# 构建 WEBUI 前端（Vuetify 4 产物输出到 src/webui/public，设备端构建）
+echo "正在构建 WEBUI 前端..."
+npm run build:webui
+if [ $? -ne 0 ]; then
+    echo "错误: WEBUI 前端构建失败"
     exit 1
 fi
 

@@ -73,22 +73,31 @@ async function readJson(req: IncomingMessage, limit = 1024 * 1024): Promise<Json
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
+/** 静态资源：只放行 PUBLIC_DIR 内的文件（resolve 前缀守卫防路径穿越）。
+ *  /static/ 下的内容带内容哈希，允许长缓存；入口与其余文件始终 no-cache。 */
 function serveStatic(res: ServerResponse, pathname: string): boolean {
   const relative = normalize(pathname === "/" ? "index.html" : pathname.replace(/^\/+/, ""));
   const target = resolve(PUBLIC_DIR, relative);
   if (!target.startsWith(PUBLIC_DIR + sep)) return false;
   try {
     const content = fs.readFileSync(target);
+    const hashed = relative.replaceAll("\\", "/").startsWith("static/");
     res.writeHead(200, {
       "Content-Type": MIME[extname(target)] ?? "application/octet-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": hashed ? "public, max-age=31536000, immutable" : "no-cache",
     });
     res.end(content);
     return true;
@@ -143,7 +152,7 @@ async function fullStatus() {
     st_config: stConfig,
     env,
     local_ip: await getLocalIp(),
-    autostart: store.get<boolean>("autostart", false),
+    startup: store.get<string>("startup", "menu"),
     mirror: store.get<string>("github.mirror", "github"),
     busy: busyTasks(),
     agreement_required: agreement.required,
@@ -217,9 +226,7 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
 
       // ---- 静态资源 ----
       if (req.method === "GET" || req.method === "HEAD") {
-        if (pathname === "/" || pathname.startsWith("/static/") || pathname === "/index.html" || pathname === "/app.js" || pathname === "/style.css") {
-          if (serveStatic(res, pathname === "/" ? "/index.html" : pathname)) return;
-        }
+        if (serveStatic(res, pathname)) return;
       }
 
       if (!pathname.startsWith("/api/")) {
@@ -384,10 +391,15 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
           await withTask("repair", () => fixNodeModules());
           return;
         }
-        case "/api/config/autostart": {
-          store.set("autostart", body.enabled === true);
+        case "/api/config/startup": {
+          const behavior = String(body.behavior ?? "");
+          if (behavior !== "menu" && behavior !== "st" && behavior !== "webui") {
+            send(res, 400, { success: false, error: "behavior 必须是 menu / st / webui" });
+            return;
+          }
+          store.set("startup", behavior);
           store.save();
-          send(res, 200, { success: true, autostart: body.enabled === true });
+          send(res, 200, { success: true, startup: behavior });
           return;
         }
         case "/api/config/mirror": {
@@ -525,7 +537,9 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
             const ok = await runWithEcho(["git", "pull"], { cwd: process.cwd() });
             if (!ok) return { ok: false, message: "git pull 失败" };
             const install = await runWithEcho(["npm", "install", "--no-audit", "--no-fund"], { cwd: process.cwd() });
-            return install ? { ok: true, message: "启动器更新完成" } : { ok: false, message: "npm install 失败" };
+            if (!install) return { ok: false, message: "npm install 失败" };
+            const build = await runWithEcho(["npm", "run", "build:webui"], { cwd: process.cwd() });
+            return build ? { ok: true, message: "启动器更新完成" } : { ok: false, message: "WEBUI 前端构建失败" };
           });
           return;
         }
@@ -551,6 +565,9 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
 
 export async function startWebui(options: WebuiOptions = {}): Promise<{ url: string; close: () => Promise<void> }> {
   const store = getConfigStore();
+  if (!fs.existsSync(resolve(PUBLIC_DIR, "index.html"))) {
+    throw new Error("WEBUI 前端未构建 — 请先运行: npm install && npm run build:webui");
+  }
   const host = options.host ?? store.get<string>("webui.host", "127.0.0.1");
   const port = options.port ?? store.get<number>("webui.port", 8300);
   const handler = createWebuiHandler({ host, port });

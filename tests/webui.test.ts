@@ -57,7 +57,7 @@ describe("WEBUI API", () => {
     try {
       expect((await get(port, "/api/ping")).status).toBe(200);
 
-      const blocked = await post(port, "/api/config/autostart", { enabled: true });
+      const blocked = await post(port, "/api/config/startup", { behavior: "menu" });
       expect(blocked.status).toBe(403);
 
       const agreement = await get(port, "/api/agreement");
@@ -70,7 +70,7 @@ describe("WEBUI API", () => {
       const accept = await post(port, "/api/agreement/accept", { accepted: true });
       expect(accept.status).toBe(200);
 
-      const allowed = await post(port, "/api/config/autostart", { enabled: true });
+      const allowed = await post(port, "/api/config/startup", { behavior: "menu" });
       expect(allowed.status).toBe(200);
 
       const status = await get(port, "/api/status");
