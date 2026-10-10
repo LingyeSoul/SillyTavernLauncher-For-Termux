@@ -1,7 +1,7 @@
 /SillyTavern
-st
-webui
-start.sh
+/st
+/webui
+/start.sh
 node_modules/
 logs/
 dist/
@@ -12,8 +12,8 @@ __pycache__/
 .ruff_cache/
 .tools/
 .omo/
-config.json
-.sync-server.json
+/config.json
+/.sync-server.json
 /backup
 /.sisyphus
-agreement_cache.json
+/agreement_cache.json
