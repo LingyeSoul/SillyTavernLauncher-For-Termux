@@ -109,7 +109,7 @@ export interface MigrationInstallation {
   hasGit?: boolean;
 }
 
-export type ViewKey = "home" | "logs" | "sync" | "config" | "more";
+export type ViewKey = "home" | "logs" | "sync" | "config" | "more" | "about";
 
 export type NotifyKind = "info" | "success" | "error" | "warning";
 

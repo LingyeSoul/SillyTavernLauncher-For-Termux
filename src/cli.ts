@@ -29,6 +29,7 @@ import { StConfig } from "./services/stConfig.ts";
 import { checkForUpdates } from "./services/updater.ts";
 import { scanForInstallations, migrateInstallation, type MigrateMode } from "./services/migrator.ts";
 import { startWebui } from "./webui/server.ts";
+import { openBrowser } from "./services/browser.ts";
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -493,7 +494,7 @@ function usage(): void {
   install         安装 SillyTavern
   start|launch    启动 SillyTavern（前台）
   menu            进入交互菜单
-  webui           启动 WebUI 管理界面
+  webui           启动 WebUI 管理界面（[--port N] [--no-open]，默认自动打开浏览器）
   config          显示配置
   startup <menu|st|webui>
                   输入 st 无参数时的行为（menu=菜单, st=一键启动酒馆, webui=一键启动 WebUI）
@@ -510,9 +511,14 @@ function usage(): void {
 }
 
 /** WebUI 前台运行（startup=webui 与 st webui 共用）。 */
-async function runWebuiForeground(port?: number): Promise<number> {
+async function runWebuiForeground(port?: number, open = true): Promise<number> {
   const { url } = await startWebui({ port });
-  process.stdout.write(`WEBUI 已启动: ${url}\n按 Ctrl+C 停止。\n`);
+  process.stdout.write(`WEBUI 已启动: ${url}\n`);
+  if (open) {
+    const opened = await openBrowser(url);
+    process.stdout.write(`${opened.ok ? "✓" : "✗"} ${opened.message}\n`);
+  }
+  process.stdout.write("按 Ctrl+C 停止。\n");
   await new Promise(() => {});
   return 0;
 }
@@ -544,7 +550,10 @@ async function main(): Promise<number> {
       return await startForeground();
     }
     if (startup === "webui") {
-      return await runWebuiForeground(findFlag("--port") ? Number(findFlag("--port")) : undefined);
+      return await runWebuiForeground(
+        findFlag("--port") ? Number(findFlag("--port")) : undefined,
+        !hasFlag("--no-open"),
+      );
     }
     await showMenu();
     return 0;
@@ -561,7 +570,10 @@ async function main(): Promise<number> {
       await showMenu();
       return 0;
     case "webui":
-      return await runWebuiForeground(findFlag("--port") ? Number(findFlag("--port")) : undefined);
+      return await runWebuiForeground(
+        findFlag("--port") ? Number(findFlag("--port")) : undefined,
+        !hasFlag("--no-open"),
+      );
     case "config":
       process.stdout.write(JSON.stringify(store.snapshot(), null, 2) + "\n");
       return 0;

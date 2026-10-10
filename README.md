@@ -40,7 +40,7 @@ source <(curl -s https://gh-proxy.org/https://raw.githubusercontent.com/LingyeSo
 st              # 交互菜单（或启用一键启动后直接启动 ST）
 st install      # 安装 SillyTavern
 st start        # 前台启动 SillyTavern
-st webui        # 启动 WebUI（默认 http://127.0.0.1:8300）
+st webui        # 启动 WebUI（默认 http://127.0.0.1:8300，自动打开浏览器；--no-open 关闭）
 ```
 
 ### 命令一览
@@ -60,7 +60,7 @@ st webui        # 启动 WebUI（默认 http://127.0.0.1:8300）
 
 ## WebUI
 
-`st webui` 后在手机浏览器打开 `http://127.0.0.1:8300`：
+`st webui` 启动后自动调用系统浏览器打开 `http://127.0.0.1:8300`（Termux 用 `termux-open-url`，桌面用 `open`/`start`/`xdg-open`）；加 `--no-open` 跳过自动打开：
 
 - **状态页** — 启动/停止/重启/安装/更新、访问地址与环境检测、启动器更新横幅
 - **日志页** — SillyTavern 进程与任务实时日志（SSE 推送）
@@ -91,7 +91,7 @@ src/
 │   ├── configStore.ts       # config.json 原子读写（0600）
 │   ├── stLifecycle.ts       # 安装/启动/停止/更新/修复 + ST 进程管理
 │   ├── gitOps.ts / versionManager.ts / migrator.ts
-│   ├── mirrors.ts / network.ts / agreement.ts / stConfig.ts
+│   ├── mirrors.ts / network.ts / agreement.ts / stConfig.ts / browser.ts
 │   ├── updater.ts           # 启动器自更新
 │   └── sync/                # common / zip(自实现安全ZIP) / server / client / manager
 └── webui/                   # WEBUI：node:http REST + SSE + 静态前端

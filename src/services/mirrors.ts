@@ -102,11 +102,17 @@ export const MIRROR_SOURCES: readonly MirrorSource[] = [
 /** host → 注册表项（O(1) 判定） */
 const MIRROR_HOST_INDEX = new Map<string, MirrorSource>(MIRROR_SOURCES.map((m) => [m.host, m]));
 
-/** 旧版短键别名（ghproxy/ghllkk 是旧 config.json 里的合法值，升级映射到注册表 host） */
+/**
+ * 旧版短键别名（ghproxy/ghllkk 是旧 config.json 里的合法值，升级映射到注册表 host）。
+ * github.com 及 www 形态语义上就是官方源，一并归一到哨兵——否则会被当成自定义
+ * 镜像域名，生成 `https://github.com/https://github.com/` 自嵌套的 insteadOf 重写。
+ */
 const LEGACY_MIRROR_KEYS: Record<string, string> = {
   ghproxy: "gh-proxy.org",
   "gh-proxy": "gh-proxy.org",
   ghllkk: "gh.llkk.cc",
+  "github.com": OFFICIAL_MIRROR,
+  "www.github.com": OFFICIAL_MIRROR,
 };
 
 /**
@@ -865,6 +871,9 @@ export function validateMirrorInput(mirror: string): { ok: true; key: string } |
   const trimmed = mirror.trim();
   if (!trimmed) return { ok: false, message: "镜像源不能为空" };
   const key = normalizeMirrorValue(trimmed);
+  // 官方源哨兵单独放行：isUsableMirrorValue 判的是「镜像前缀主机」（'github'
+  // 不含点号、也不在注册表，必为 false）——但它是 CLI 用法与 WebUI 文档承诺的合法值
+  if (key === OFFICIAL_MIRROR) return { ok: true, key };
   if (!isUsableMirrorValue(key)) {
     return { ok: false, message: `无效的镜像源: ${trimmed}（应为镜像域名或 github）` };
   }

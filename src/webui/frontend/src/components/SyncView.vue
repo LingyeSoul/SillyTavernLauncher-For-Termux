@@ -1,6 +1,8 @@
 <script setup lang="ts">
-/** 同步页 — 分享服务器控制 + 从服务器拉取 + 已存服务器管理。 */
+/** 同步页 — 分享服务器控制 + 从服务器拉取 + 已存服务器管理。
+ *  embedded=true 时作为「更多」页的同步 Tab 嵌入，隐藏页头由 Tab 提供标题语境。 */
 import { computed, ref } from "vue";
+defineProps<{ embedded?: boolean }>();
 import { mdiContentCopy, mdiKeyOutline, mdiPlay, mdiStop, mdiServerRemove, mdiSync } from "@mdi/js";
 import { confirmDialog } from "../composables/confirm";
 import { api, post } from "../composables/api";
@@ -105,7 +107,7 @@ const stateText = computed(() => (running.value ? "运行中" : "已停止"));
 
 <template>
   <div class="sync-view anim-fade-up">
-    <PageHeader title="数据同步" sub="在设备之间迁移 SillyTavern 数据">
+    <PageHeader v-if="!embedded" title="数据同步" sub="在设备之间迁移 SillyTavern 数据">
       <template #actions>
         <v-chip :color="running ? 'success' : undefined" variant="tonal" size="small">
           {{ stateText }}

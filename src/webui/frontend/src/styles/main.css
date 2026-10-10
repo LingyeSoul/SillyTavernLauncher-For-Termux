@@ -344,18 +344,16 @@ body {
   padding: 0 20px;
 }
 
-.brand-mark {
+/* 官方 logo（PC 版同源 256×256 透明底）：直接展示，圆角档位随尺寸 */
+.brand-logo {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  display: grid;
-  place-items: center;
-  background: var(--bg-elevated);
-  color: var(--forge-ember);
   flex: none;
+  display: block;
 }
 
-.brand-mark--sm {
+.brand-logo--sm {
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);

@@ -4,6 +4,7 @@
  */
 import { startWebui } from "./webui/server.ts";
 import { checkSystemEnv } from "./services/stLifecycle.ts";
+import { openBrowser } from "./services/browser.ts";
 import { LAUNCHER_VERSION } from "./version.ts";
 
 async function main(): Promise<number> {
@@ -15,7 +16,13 @@ async function main(): Promise<number> {
   try {
     const { url, close } = await startWebui();
     process.stdout.write(`WEBUI 已启动: ${url}\n`);
-    process.stdout.write("在手机浏览器打开上面的地址，按 Ctrl+C 停止。\n");
+    if (!process.argv.includes("--no-open")) {
+      const opened = await openBrowser(url);
+      process.stdout.write(`${opened.ok ? "✓" : "✗"} ${opened.message}\n`);
+    } else {
+      process.stdout.write(`在浏览器打开上面的地址（--no-open 已跳过自动打开）\n`);
+    }
+    process.stdout.write("按 Ctrl+C 停止。\n");
     let closing = false;
     const shutdown = async () => {
       if (closing) return;

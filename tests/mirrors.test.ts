@@ -152,6 +152,9 @@ describe("旧配置兼容", () => {
     expect(normalizeMirrorValue("  https://GH-Proxy.org/  ")).toBe("gh-proxy.org");
     expect(normalizeMirrorValue("")).toBe(OFFICIAL_MIRROR);
     expect(normalizeMirrorValue("github")).toBe(OFFICIAL_MIRROR);
+    // 官方域名字面量同样归一为哨兵（否则会生成自嵌套 insteadOf 重写）
+    expect(normalizeMirrorValue("https://github.com/")).toBe(OFFICIAL_MIRROR);
+    expect(normalizeMirrorValue("www.github.com")).toBe(OFFICIAL_MIRROR);
     expect(normalizeMirrorValue("gh.example.com")).toBe("gh.example.com");
   });
 
@@ -183,6 +186,9 @@ describe("旧配置兼容", () => {
     expect(validateMirrorInput("ghproxy")).toEqual({ ok: true, key: "gh-proxy.org" });
     expect(validateMirrorInput("https://gh-proxy.org")).toEqual({ ok: true, key: "gh-proxy.org" });
     expect(validateMirrorInput("my.mirror.example.com")).toEqual({ ok: true, key: "my.mirror.example.com" });
+    // 官方源哨兵是文档承诺的合法值（CLI/WebUI 都会传 'github'），不得拒绝
+    expect(validateMirrorInput("github")).toEqual({ ok: true, key: OFFICIAL_MIRROR });
+    expect(validateMirrorInput("https://github.com")).toEqual({ ok: true, key: OFFICIAL_MIRROR });
     expect(validateMirrorInput("!!bad!!").ok).toBe(false);
     expect(validateMirrorInput("").ok).toBe(false);
     expect(validateMirrorInput("带 空格的域名").ok).toBe(false);

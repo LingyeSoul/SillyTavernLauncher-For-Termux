@@ -109,6 +109,24 @@ describe("WEBUI API", () => {
     }
   });
 
+  it("关于页检查更新：绕过缓存强制检查，返回结构化结果", async () => {
+    const handler = createWebuiHandler({ host: "127.0.0.1" });
+    const { port, close } = await withServer((req, res) => void handler(req, res));
+    try {
+      const blocked = await post(port, "/api/launcher/check-update", {});
+      expect(blocked.status).toBe(403); // EULA 门控同样覆盖
+
+      await post(port, "/api/agreement/accept", { accepted: true });
+      const res = await post(port, "/api/launcher/check-update", {});
+      expect(res.status).toBe(200);
+      const payload = JSON.parse(res.text) as { has_update?: boolean; has_error?: boolean };
+      expect(typeof payload.has_update).toBe("boolean");
+      expect(typeof payload.has_error).toBe("boolean");
+    } finally {
+      await close();
+    }
+  });
+
   it("智能镜像：注册表读取 / 智能模式开关 / 手动选择 / 测速任务受理", async () => {
     // 隔离全局 gitconfig（applyGitMirrorConfig 会写 --global 配置）
     const gitConfig = path.join(makeDataDir(), "gitconfig");
@@ -137,6 +155,11 @@ describe("WEBUI API", () => {
       const legacy = await post(port, "/api/config/mirror", { mirror: "ghproxy" });
       expect(legacy.status).toBe(200);
       expect(JSON.parse(legacy.text).mirror).toBe("gh-proxy.org");
+
+      // 回归：官方源哨兵 'github' 是前端「官方源」按钮下发的合法值，曾被误判无效
+      const official = await post(port, "/api/config/mirror", { mirror: "github" });
+      expect(official.status).toBe(200);
+      expect(JSON.parse(official.text)).toMatchObject({ mirror: "github", enabled: false });
 
       const empty = await post(port, "/api/config/mirror", {});
       expect(empty.status).toBe(400);

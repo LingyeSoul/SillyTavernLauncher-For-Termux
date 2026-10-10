@@ -43,6 +43,7 @@ import {
 } from "../services/stLifecycle.ts";
 import { StConfig } from "../services/stConfig.ts";
 import { checkForUpdates } from "../services/updater.ts";
+import { getBaseDir } from "../services/paths.ts";
 import { getVersionInfo, listVersions, switchVersion, updateRemoteTags } from "../services/versionManager.ts";
 import { getSyncManager } from "../services/sync/manager.ts";
 import { scanForInstallations, migrateInstallation, type MigrateMode } from "../services/migrator.ts";
@@ -54,6 +55,15 @@ const tasks = new Set<TaskKind>();
 
 export function busyTasks(): TaskKind[] {
   return [...tasks];
+}
+
+/** 进程自重启：分离新进程接替 WEBUI。execArgv 必须保留（Node 22 跑 .ts 依赖 --experimental-strip-types）。 */
+function respawn(delayMs: number): void {
+  setTimeout(() => {
+    const args = [...process.execArgv, ...process.argv.slice(1)];
+    spawn(process.execPath, args, { detached: true, stdio: "ignore", cwd: getBaseDir() }).unref();
+    process.exit(0);
+  }, delayMs);
 }
 
 interface JsonBody {
@@ -616,22 +626,28 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
         case "/api/launcher/update": {
           await withTask("launcherUpdate", async () => {
             const { runWithEcho } = await import("../services/runtime.ts");
-            const ok = await runWithEcho(["git", "pull"], { cwd: process.cwd() });
+            const cwd = getBaseDir();
+            const ok = await runWithEcho(["git", "pull"], { cwd });
             if (!ok) return { ok: false, message: "git pull 失败" };
-            const install = await runWithEcho(["npm", "install", "--no-audit", "--no-fund"], { cwd: process.cwd() });
+            const install = await runWithEcho(["npm", "install", "--no-audit", "--no-fund"], { cwd });
             if (!install) return { ok: false, message: "npm install 失败" };
-            const build = await runWithEcho(["npm", "run", "build:webui"], { cwd: process.cwd() });
-            return build ? { ok: true, message: "启动器更新完成" } : { ok: false, message: "WEBUI 前端构建失败" };
+            const build = await runWithEcho(["npm", "run", "build:webui"], { cwd });
+            if (!build) return { ok: false, message: "WEBUI 前端构建失败" };
+            respawn(800); // 成功后自动重启换新代码；失败路径不重启
+            return { ok: true, message: "启动器更新完成，正在重启 WEBUI" };
           });
+          return;
+        }
+        case "/api/launcher/check-update": {
+          // 关于页「检查更新」：绕过 5 分钟缓存强制刷新，结果回写缓存供 status 轮询复用
+          const result = await checkForUpdates(activeMirrorHost(store)).catch(() => null);
+          updateCheckCache = { at: Date.now(), result };
+          send(res, 200, result ?? { has_error: true, error_message: "检查失败", latest_version: null, has_update: false });
           return;
         }
         case "/api/launcher/restart": {
           send(res, 202, { success: true, started: true });
-          setTimeout(() => {
-            const args = process.argv.slice(1);
-            spawn(process.execPath, args, { detached: true, stdio: "ignore", cwd: process.cwd() }).unref();
-            process.exit(0);
-          }, 300);
+          respawn(300);
           return;
         }
         default:

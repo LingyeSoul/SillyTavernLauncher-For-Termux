@@ -9,7 +9,7 @@ import { useDisplay } from "vuetify";
 import {
   mdiCogOutline,
   mdiDotsHorizontal,
-  mdiFire,
+  mdiInformationOutline,
   mdiSync,
   mdiTextBoxOutline,
   mdiViewDashboardOutline,
@@ -23,6 +23,8 @@ import LogsView from "./components/LogsView.vue";
 import SyncView from "./components/SyncView.vue";
 import SettingsView from "./components/SettingsView.vue";
 import MoreView from "./components/MoreView.vue";
+import AboutView from "./components/AboutView.vue";
+import logoUrl from "./assets/logo.png";
 
 const { mdAndUp } = useDisplay();
 const isDesktop = computed(() => mdAndUp.value);
@@ -45,15 +47,23 @@ const NAV: { group: string; items: { key: ViewKey; label: string; icon: string }
   },
 ];
 
+/** 移动底栏：更多收纳同步后置第 3 位，第 5 位关于（对齐桌面版导航 IA）。 */
+const MOBILE_TABS: { key: ViewKey; label: string; icon: string }[] = [
+  { key: "home", label: "状态", icon: mdiViewDashboardOutline },
+  { key: "logs", label: "日志", icon: mdiTextBoxOutline },
+  { key: "more", label: "更多", icon: mdiDotsHorizontal },
+  { key: "config", label: "设置", icon: mdiCogOutline },
+  { key: "about", label: "关于", icon: mdiInformationOutline },
+];
+
 const VIEWS: Record<ViewKey, Component> = {
   home: StatusView,
   logs: LogsView,
   sync: SyncView,
   config: SettingsView,
   more: MoreView,
+  about: AboutView,
 };
-
-const ALL_ITEMS = NAV.flatMap((group) => group.items);
 
 const currentView = computed(() => VIEWS[store.view]);
 const launcherVersion = computed(() => store.status?.launcher_version ?? "");
@@ -96,9 +106,7 @@ onMounted(initLauncher);
     <!-- 桌面导航抽屉 -->
     <v-navigation-drawer v-if="isDesktop" permanent :width="240" class="workspace-nav">
       <div class="workspace-brand">
-        <div class="brand-mark">
-          <v-icon :icon="mdiFire" size="18" />
-        </div>
+        <img class="brand-logo" :src="logoUrl" alt="SillyTavernLauncher logo" />
         <div>
           <div class="brand-name">STL</div>
           <div class="brand-sub">SillyTavern Launcher</div>
@@ -130,9 +138,7 @@ onMounted(initLauncher);
     <v-app-bar flat :height="isDesktop ? 60 : 52" class="workspace-topbar">
       <div class="topbar-inner">
         <div class="topbar-brand">
-          <div class="brand-mark brand-mark--sm">
-            <v-icon :icon="mdiFire" size="13" />
-          </div>
+          <img class="brand-logo brand-logo--sm" :src="logoUrl" alt="" />
           <span class="topbar-title">SillyTavernLauncher</span>
         </div>
         <v-spacer />
@@ -171,7 +177,7 @@ onMounted(initLauncher);
     <!-- 移动底栏 -->
     <nav v-if="!isDesktop" class="stl-tabbar">
       <button
-        v-for="item in ALL_ITEMS"
+        v-for="item in MOBILE_TABS"
         :key="item.key"
         class="stl-tab"
         :class="{ 'stl-tab--active': store.view === item.key }"

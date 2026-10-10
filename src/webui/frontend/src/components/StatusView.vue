@@ -15,6 +15,7 @@ import { post } from "../composables/api";
 import { notify, refresh, store } from "../composables/launcher";
 import { runAction } from "../composables/actions";
 import { followOnUpdate } from "../composables/smartScroll";
+import { launcherUpdating, runLauncherUpdate, updateBanner } from "../composables/launcherUpdate";
 import MetricTile from "./MetricTile.vue";
 import PageHeader from "./PageHeader.vue";
 import SectionCard from "./SectionCard.vue";
@@ -44,11 +45,7 @@ const subtitle = computed(() => {
   return `${version}${commit}`;
 });
 
-const update = computed(() => {
-  const info = status.value?.update;
-  if (!info || info.has_error || !info.has_update) return null;
-  return `v${info.current_version} → v${info.latest_version}${info.is_dev_version ? " [开发版]" : ""}`;
-});
+const update = updateBanner;
 
 /* 内容更新贴底跟随（更新横幅出现 / 安装·运行状态切换改变页高时） */
 followOnUpdate(() => [installed.value, running.value, update.value !== null, store.busy.length]);
@@ -93,16 +90,6 @@ async function install(): Promise<void> {
 async function updateSt(): Promise<void> {
   await runAction(() => post("/api/st/update"), { success: "更新已开始，请在日志页查看进度" });
 }
-
-async function updateLauncher(): Promise<void> {
-  const ok = await confirmDialog({
-    title: "更新启动器",
-    text: "将执行 git pull 并重启 WEBUI，确认继续？",
-    confirmText: "更新并重启",
-  });
-  if (!ok) return;
-  await runAction(() => post("/api/launcher/update"), { success: "更新中…" });
-}
 </script>
 
 <template>
@@ -120,7 +107,9 @@ async function updateLauncher(): Promise<void> {
       <div class="d-flex align-center flex-wrap ga-2">
         <span>启动器更新可用：{{ update }}</span>
         <v-spacer />
-        <v-btn size="small" variant="outlined" :prepend-icon="mdiUpdate" @click="updateLauncher">更新启动器</v-btn>
+        <v-btn size="small" variant="outlined" :prepend-icon="mdiUpdate" :loading="launcherUpdating" @click="runLauncherUpdate">
+          更新启动器
+        </v-btn>
       </div>
     </v-alert>
 
