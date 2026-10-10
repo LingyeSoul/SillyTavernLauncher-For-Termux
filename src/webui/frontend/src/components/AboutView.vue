@@ -14,7 +14,7 @@ import PageHeader from "./PageHeader.vue";
 import logoUrl from "../assets/logo.png";
 
 const LINKS = [
-  { label: "访问 GitHub 仓库", url: "https://github.com/LingyeSoul/SillyTavernLauncher" },
+  { label: "访问 GitHub 仓库", url: "https://github.com/LingyeSoul/SillyTavernLauncher-For-Termux" },
   { label: "访问启动器官网", url: "https://sillytavern.lingyesoul.top" },
   { label: "访问作者 B 站", url: "https://space.bilibili.com/298721157" },
   { label: "加入 QQ 频道", url: "https://pd.qq.com/s/9usg3jiu1" },
