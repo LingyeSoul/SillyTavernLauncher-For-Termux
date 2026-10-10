@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# SillyTavernLauncher for Termux - 安装脚本
-# 用于在Termux环境中快速安装和配置SillyTavernLauncher CLI
+# SillyTavernLauncher for Termux - 安装脚本 (Node.js/TypeScript 版)
+# 依赖: nodejs-lts (>= 22.6) + git，不再需要 Python
 
 echo "========================================="
 echo "SillyTavernLauncher for Termux 安装脚本"
@@ -18,16 +18,23 @@ fi
 echo "正在更新包管理器..."
 pkg update -y
 
-# 安装必要的包
+# 安装必要的包（SillyTavern 本身也运行在 Node 上，启动器与其共用同一运行时）
 echo "正在安装必要的包..."
-pkg install -y python nodejs-lts git
+pkg install -y nodejs-lts git
 
-# 创建项目目录 (使用用户主目录而不是根目录)
+# 检查 Node 版本 (>= 22.6，需要原生 TypeScript 支持)
+NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
+NODE_MINOR=$(node -p 'process.versions.node.split(".")[1]')
+if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 6 ]; }; then
+    echo "错误: 需要 Node.js >= 22.6 (当前 $(node -v))"
+    echo "请运行: pkg install nodejs-lts 后重试"
+    exit 1
+fi
+
+# 创建项目目录
 echo "正在创建项目目录..."
 ST_LAUNCHER_DIR="$HOME/SillytavernLauncher"
 mkdir -p "$ST_LAUNCHER_DIR"
-
-# 进入项目目录
 cd "$ST_LAUNCHER_DIR"
 
 # 克隆项目文件
@@ -43,73 +50,51 @@ else
     fi
 fi
 
-# 创建虚拟环境
-echo "正在创建Python虚拟环境..."
-python -m venv venv
-source venv/bin/activate
-
-# 安装Python依赖
-echo "正在安装Python依赖..."
-# 优先从requirements.txt安装，确保版本一致性
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
-else
-    # 备用方案：安装核心依赖
-    pip install ruamel.yaml flask requests
+# 安装依赖（仅运行时依赖，只有一个 yaml 包）
+echo "正在安装 Node.js 依赖..."
+npm install --omit=dev --no-audit --no-fund
+if [ $? -ne 0 ]; then
+    echo "错误: 依赖安装失败"
+    exit 1
 fi
 
 # 创建启动脚本
 echo "正在创建启动脚本..."
-cat > start.sh << 'EOF'
-#!/bin/bash
-cd "$HOME/SillytavernLauncher"
-source venv/bin/activate
-python src/main_cli.py "$@"
-EOF
-
-chmod +x start.sh
-
-# 创建简化启动脚本
-echo "正在创建简化启动脚本..."
 cat > st << 'EOF'
 #!/bin/bash
 cd "$HOME/SillytavernLauncher"
-source venv/bin/activate
-python src/main_cli.py "$@"
+exec node --experimental-strip-types src/cli.ts "$@"
 EOF
-
 chmod +x st
 
+cat > webui << 'EOF'
+#!/bin/bash
+cd "$HOME/SillytavernLauncher"
+exec node --experimental-strip-types src/webui.ts "$@"
+EOF
+chmod +x webui
 
-# 创建桌面快捷方式或别名
+# 创建别名
 echo "正在创建别名..."
-# 先清空可能已有的相关别名
 sed -i '/alias st=/d' $HOME/.bashrc
 sed -i '/alias ST=/d' $HOME/.bashrc
 sed -i '/alias stl=/d' $HOME/.bashrc
 
-echo "alias st='$HOME/SillytavernLauncher/st'" >> $HOME/.bashrc
+echo "alias st='$HOME/SillyTavernLauncher/st'" >> $HOME/.bashrc
 echo "alias ST='$HOME/SillytavernLauncher/st'" >> $HOME/.bashrc
 
-# 确保脚本在当前会话中可用
 export PATH="$HOME/SillytavernLauncher:$PATH"
 
 echo "========================================="
 echo "安装完成!"
 echo ""
-echo "正在自动加载环境变量..."
-source ~/.bashrc
-
-echo "========================================="
 echo "现在可以使用以下命令:"
-echo "  st             (进入菜单界面)"
-echo "  st menu        (进入菜单界面)"
-echo "  st --help      (查看帮助信息)"
-echo "  ST --help      (查看帮助信息)"
-echo "  st update-launcher (更新SillyTavernLauncher)"
+echo "  st          (进入菜单界面 / 一键启动)"
+echo "  st webui    (启动 WebUI 管理界面)"
+echo "  webui       (同上)"
+echo "  st --help   (查看帮助)"
 echo ""
+echo "首次使用会要求同意用户协议。"
 echo "========================================="
 
-# 退出虚拟环境
-deactivate
-
+source ~/.bashrc

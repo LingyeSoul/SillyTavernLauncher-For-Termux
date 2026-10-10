@@ -1,0 +1,24 @@
+{
+  "name": "sillytavern-launcher-for-termux",
+  "version": "0.8.0",
+  "description": "SillyTavern launcher for Termux (Node.js/TypeScript) with WebUI",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/cli.ts",
+    "webui": "node --experimental-strip-types src/webui.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

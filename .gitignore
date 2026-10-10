@@ -1,12 +1,17 @@
 /SillyTavern
 st
+webui
 start.sh
+node_modules/
+logs/
+dist/
 venv/
 .venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 .tools/
+.omo/
 config.json
 .sync-server.json
 /backup

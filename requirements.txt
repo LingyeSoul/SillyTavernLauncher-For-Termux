@@ -1,9 +1,0 @@
-# Core dependencies
-ruamel.yaml
-
-# Sync server dependencies
-flask
-requests
-
-# Async HTTP client (for version checking and management)
-aiohttp
