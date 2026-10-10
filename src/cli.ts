@@ -9,7 +9,19 @@ import { getBaseDir } from "./services/paths.ts";
 import { getConfigStore } from "./services/configStore.ts";
 import { checkSystemEnv, isStInstalled, startForeground, installSillytavern, updateSillytavern, fixNodeModules } from "./services/stLifecycle.ts";
 import { checkAgreementState, LOCAL_EULA_VERSION } from "./services/agreement.ts";
-import { MIRROR_LIST, applyGitMirrorConfig, getDisplayName, validateMirrorInput } from "./services/mirrors.ts";
+import {
+  MIRROR_SOURCES,
+  activeMirrorHost,
+  applyGitMirrorConfig,
+  autoSelectMirror,
+  createMirrorPingProbe,
+  mirrorDisplayName,
+  readMirrorState,
+  setMirrorChoice,
+  speedTestMirrors,
+  validateMirrorInput,
+  writeMirrorState,
+} from "./services/mirrors.ts";
 import { getSyncManager } from "./services/sync/manager.ts";
 import { redactShareUrl } from "./services/sync/common.ts";
 import { getVersionInfo, listVersions, switchVersion, updateRemoteTags } from "./services/versionManager.ts";
@@ -67,9 +79,14 @@ async function eulaGate(): Promise<boolean> {
 async function showMenu(): Promise<void> {
   const store = getConfigStore();
   for (;;) {
-    const mirror = store.get<string>("github.mirror", "github");
+    const state = readMirrorState(store);
+    const modeText = !state.enabled
+      ? "官方源"
+      : state.auto
+        ? `智能自动（${mirrorDisplayName(activeMirrorHost(store))}）`
+        : `手动指定（${mirrorDisplayName(state.host)}）`;
     process.stdout.write("\n" + "=".repeat(50) + `\nSillyTavernLauncher 菜单 v${LAUNCHER_VERSION}\n` + "=".repeat(50) + "\n");
-    process.stdout.write(`安装状态: ${isStInstalled() ? "已安装" : "未安装"} | 镜像: ${getDisplayName(mirror)}\n\n`);
+    process.stdout.write(`安装状态: ${isStInstalled() ? "已安装" : "未安装"} | 镜像: ${modeText}\n\n`);
     process.stdout.write("1. 安装 SillyTavern\n");
     process.stdout.write("2. 启动 SillyTavern\n");
     process.stdout.write("3. 显示配置\n");
@@ -170,9 +187,7 @@ async function runStart(): Promise<void> {
 }
 
 async function updateLauncher(): Promise<void> {
-  const store = getConfigStore();
-  const mirror = store.get<string>("github.mirror", "github");
-  const result = await checkForUpdates(mirror);
+  const result = await checkForUpdates();
   if (result.has_error) {
     process.stdout.write(`检查更新失败: ${result.error_message}\n`);
     return;
@@ -195,23 +210,96 @@ async function updateLauncher(): Promise<void> {
   process.stdout.write("SillyTavernLauncher 更新完成! 请重新运行 st\n");
 }
 
+/** 镜像菜单 — 智能镜像体系（官方源 / 智能自动 / 测速 / 手动选择）。 */
 async function mirrorMenu(): Promise<void> {
-  process.stdout.write("\nGitHub 镜像设置:\n");
-  MIRROR_LIST.forEach(([key, display], i) => process.stdout.write(`${i + 1}. ${display}\n`));
-  process.stdout.write("0. 返回上级菜单\n");
-  const choice = await ask(`请选择镜像源 [0-${MIRROR_LIST.length}]: `);
-  if (choice === "0") return;
-  const index = Number(choice) - 1;
-  if (!(index >= 0 && index < MIRROR_LIST.length)) {
-    process.stdout.write("无效选择\n");
-    return;
-  }
-  const key = MIRROR_LIST[index][0];
   const store = getConfigStore();
-  store.set("github.mirror", key);
-  store.save();
-  await applyGitMirrorConfig(key);
-  process.stdout.write(`GitHub 镜像已设置为: ${getDisplayName(key)}\n`);
+  const state = readMirrorState(store);
+  const active = activeMirrorHost(store);
+  const modeText = !state.enabled ? "官方源" : state.auto ? "智能自动（测速选优 + 故障切换）" : "手动指定";
+  const testedAt = state.speedtest.tested_at
+    ? `，上次测速 ${state.speedtest.tested_at.slice(0, 16).replace("T", " ")}`
+    : "";
+  process.stdout.write(`\nGitHub 镜像设置（当前: ${mirrorDisplayName(active)} | 模式: ${modeText}${testedAt}）:\n`);
+  process.stdout.write("1. 使用官方源（关闭加速）\n");
+  process.stdout.write("2. 开启智能镜像（自动测速选优 + 网络故障自动切换）\n");
+  process.stdout.write("3. 立即测速选优\n");
+  process.stdout.write("4. 全量测速（仅测速，不切换）\n");
+  process.stdout.write("5. 从推荐列表手动选择\n");
+  process.stdout.write("6. 输入自定义镜像域名\n");
+  process.stdout.write("0. 返回上级菜单\n");
+  const choice = await ask("请选择 [0-6]: ");
+  try {
+    if (choice === "0") return;
+    if (choice === "1") {
+      setMirrorChoice("github");
+      await applyGitMirrorConfig("github");
+      process.stdout.write("✓ 已切换为 GitHub 官方源\n");
+    } else if (choice === "2") {
+      writeMirrorState({ enabled: true, auto: true }, store);
+      await applyGitMirrorConfig(activeMirrorHost(store));
+      process.stdout.write("✓ 智能镜像已开启：未选定镜像时自动测速选优，仅在镜像失效时自动切换\n");
+    } else if (choice === "3") {
+      if (!readMirrorState(store).enabled) {
+        process.stdout.write("当前为官方源，先选择 2 开启智能镜像\n");
+        return;
+      }
+      writeMirrorState({ enabled: true, auto: true }, store);
+      process.stdout.write("正在测速选优...\n");
+      const outcome = await autoSelectMirror({ probe: createMirrorPingProbe() });
+      process.stdout.write(`${outcome.exhausted ? "✗" : "✓"} ${outcome.message}\n`);
+      if (outcome.host) await applyGitMirrorConfig(outcome.host);
+    } else if (choice === "4") {
+      process.stdout.write(`正在全量测速（${MIRROR_SOURCES.length} 个镜像站，ping 探测）...\n`);
+      const speedtest = await speedTestMirrors(
+        MIRROR_SOURCES.map((source) => source.host),
+        {
+          probe: createMirrorPingProbe(),
+          onResult: (host, latency) =>
+            process.stdout.write(`  ${host}: ${latency === null ? "不可达" : `${latency}ms`}\n`),
+        },
+      );
+      writeMirrorState({ speedtest }, store);
+      const ok = Object.keys(speedtest.results).length;
+      process.stdout.write(`✓ 测速完成：${ok} 个可用 / ${speedtest.failed.length} 个不可达\n`);
+    } else if (choice === "5") {
+      // 推荐列表：实测延迟优先，其次注册表报告值，取前 12
+      const state2 = readMirrorState(store);
+      const ranked = [...MIRROR_SOURCES]
+        .sort((a, b) => {
+          const la = state2.speedtest.results[a.host];
+          const lb = state2.speedtest.results[b.host];
+          return (la ?? a.reportedMs ?? 9_999) - (lb ?? b.reportedMs ?? 9_999);
+        })
+        .slice(0, 12);
+      ranked.forEach((source, i) => {
+        const measured = state2.speedtest.results[source.host];
+        const latencyText = measured !== undefined ? `${measured}ms` : source.reportedMs !== undefined ? `~${source.reportedMs}ms` : "";
+        const mark = source.host === active ? " ← 当前" : "";
+        process.stdout.write(`${i + 1}. ${source.host} ${latencyText}${mark}\n`);
+      });
+      const pick = await ask(`请选择 [1-${ranked.length}, 0取消]: `);
+      const index = Number(pick) - 1;
+      if (!(index >= 0 && index < ranked.length)) return;
+      const host = ranked[index].host;
+      setMirrorChoice(host, store);
+      await applyGitMirrorConfig(host);
+      process.stdout.write(`✓ GitHub 镜像已设置为: ${host}（手动模式）\n`);
+    } else if (choice === "6") {
+      const input = await ask("请输入镜像域名（如 gh.example.com）: ");
+      const validated = validateMirrorInput(input);
+      if (!validated.ok) {
+        process.stdout.write(`✗ ${validated.message}\n`);
+        return;
+      }
+      setMirrorChoice(validated.key, store);
+      await applyGitMirrorConfig(validated.key);
+      process.stdout.write(`✓ GitHub 镜像已设置为: ${validated.key}（手动模式）\n`);
+    } else {
+      process.stdout.write("无效选择\n");
+    }
+  } catch (error) {
+    process.stdout.write(`发生错误: ${String(error)}\n`);
+  }
 }
 
 async function syncMenu(): Promise<void> {
@@ -412,7 +500,8 @@ function usage(): void {
   autostart <enable|disable>
                   兼容旧命令：enable=startup st, disable=startup menu
   update <st|stl> 更新 SillyTavern / 启动器
-  set-mirror <mirror>
+  set-mirror <github|auto|域名>
+                  github=官方源, auto=智能测速选优+故障切换, 其他=手动指定镜像
   sync <start|stop|info|rotate-token|from|menu> [--port N] [--server-url URL]
   version <info|list|switch> [--commit H | --version-str V]
   st-config <port|listen> [--st-port N] [--enable-listen | --disable-listen]
@@ -516,18 +605,26 @@ async function main(): Promise<number> {
     case "set-mirror": {
       const mirror = findFlag("--mirror") ?? args[args.indexOf(command) + 1];
       if (!mirror || mirror.startsWith("--")) {
-        process.stdout.write("用法: st set-mirror <github|ghproxy|ghllkk|域名>\n");
+        process.stdout.write("用法: st set-mirror <github|auto|镜像域名>\n");
         return 1;
+      }
+      if (mirror.toLowerCase() === "auto") {
+        // 智能模式：自动测速选优 + 网络故障自动切换
+        writeMirrorState({ enabled: true, auto: true }, store);
+        process.stdout.write("正在测速选优...\n");
+        const outcome = await autoSelectMirror({ probe: createMirrorPingProbe() });
+        process.stdout.write(`${outcome.exhausted ? "✗" : "✓"} ${outcome.message}\n`);
+        if (outcome.host) await applyGitMirrorConfig(outcome.host);
+        return outcome.exhausted ? 1 : 0;
       }
       const validated = validateMirrorInput(mirror);
       if (!validated.ok) {
         process.stdout.write(`✗ ${validated.message}\n`);
         return 1;
       }
-      store.set("github.mirror", validated.key);
-      store.save();
-      await applyGitMirrorConfig(validated.key);
-      process.stdout.write(`✓ GitHub 镜像已设置为: ${getDisplayName(validated.key)}\n`);
+      const key = setMirrorChoice(validated.key, store);
+      await applyGitMirrorConfig(key);
+      process.stdout.write(`✓ GitHub 镜像已设置为: ${key}${key === "github" ? "（官方源）" : "（手动模式）"}\n`);
       return 0;
     }
     case "sync": {

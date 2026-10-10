@@ -1,7 +1,7 @@
 <script setup lang="ts">
-/** 设置页 — 双 tab：酒馆设置（ST 参数 + 镜像）/ 启动器设置（st 命令行为）。字段聚焦时不被轮询刷新覆盖。 */
+/** 设置页 — 双 tab：酒馆设置（ST 参数 + 智能镜像）/ 启动器设置（st 命令行为）。字段聚焦时不被轮询刷新覆盖。 */
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { mdiCheck, mdiContentSave, mdiLanConnect, mdiPlaylistEdit } from "@mdi/js";
+import { mdiAutoFix, mdiCheck, mdiContentSave, mdiLanConnect, mdiPlaylistEdit, mdiSpeedometer } from "@mdi/js";
 import { api, errorMessage, post } from "../composables/api";
 import { notify, refresh, store } from "../composables/launcher";
 import { followOnUpdate } from "../composables/smartScroll";
@@ -58,7 +58,7 @@ onMounted(async () => {
 });
 
 /* 内容更新贴底跟随（镜像列表载入 / 切 tab 引起页高变化时若在页尾阅读则跟随） */
-followOnUpdate(() => [mirrors.value?.mirrors.length ?? 0, cfgListen.value, tab.value]);
+followOnUpdate(() => [mirrors.value?.mirrors.length ?? 0, mirrors.value?.current ?? "", cfgListen.value, tab.value]);
 
 async function savePort(): Promise<void> {
   const port = Number(cfgPort.value);
@@ -120,11 +120,59 @@ async function saveStartup(value: string | null): Promise<void> {
   }
 }
 
-async function selectMirror(key: string, display: string): Promise<void> {
+// ---------- 智能镜像 ----------
+
+/** 镜像任务（测速/选优）运行中：后端 busy 里有 mirror */
+const mirrorTaskRunning = computed(() => store.status?.busy?.includes("mirror") ?? false);
+
+/** 推荐列表：实测延迟优先，其次注册表报告值，取前 12 */
+const rankedMirrors = computed(() => {
+  const list = [...(mirrors.value?.mirrors ?? [])];
+  list.sort((a, b) => (a.latency_ms ?? a.reported_ms ?? 9e9) - (b.latency_ms ?? b.reported_ms ?? 9e9));
+  return list.slice(0, 12);
+});
+
+const mirrorModeText = computed(() => {
+  const data = mirrors.value;
+  if (!data) return "加载中…";
+  if (!data.enabled) return "官方源（未加速）";
+  return data.auto ? "智能自动" : "手动指定";
+});
+
+async function reloadMirrors(): Promise<void> {
+  mirrors.value = await api<MirrorsResponse>("/api/mirrors");
+}
+
+/** 手动点选（含官方源）——自动切优让位于用户意志 */
+async function selectMirror(host: string, label: string): Promise<void> {
   try {
-    await post("/api/config/mirror", { mirror: key });
-    notify(`镜像已切换: ${display}`, "success");
-    mirrors.value = await api<MirrorsResponse>("/api/mirrors");
+    await post("/api/config/mirror", { mirror: host });
+    notify(`镜像已切换: ${label}`, "success");
+    await reloadMirrors();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
+async function enableSmartMirror(): Promise<void> {
+  try {
+    await post("/api/config/mirror", { enabled: true });
+    notify("智能加速已开启：未选定镜像时自动选优，仅在镜像失效时自动切换", "success");
+    await reloadMirrors();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
+/** 后台任务（202）：提示 + 延迟刷新结果（进度实时进日志页） */
+async function startMirrorTask(path: string, doing: string, doneHint: string): Promise<void> {
+  try {
+    await post(path, {});
+    notify(`${doing}（进度见日志页，完成后列表自动刷新）`, "info");
+    setTimeout(() => {
+      void reloadMirrors().catch(() => {});
+      notify(doneHint, "info");
+    }, 8000);
   } catch (error) {
     notify(errorMessage(error), "error");
   }
@@ -200,21 +248,77 @@ async function selectMirror(key: string, display: string): Promise<void> {
         <v-card variant="tonal" class="mt-4">
           <v-card-title class="section-title">GitHub 镜像</v-card-title>
           <v-card-text>
+            <div class="mirror-status">
+              <span class="mirror-current">当前：{{ mirrors?.display ?? "…" }}</span>
+              <v-chip
+                size="x-small"
+                :variant="mirrors?.enabled && mirrors?.auto ? 'tonal' : 'outlined'"
+                :color="mirrors?.enabled && mirrors?.auto ? 'primary' : undefined"
+              >
+                {{ mirrorModeText }}
+              </v-chip>
+            </div>
+            <p v-if="mirrors?.speedtest?.tested_at" class="muted-hint">
+              上次测速 {{ mirrors.speedtest.tested_at.slice(0, 16).replace("T", " ") }} ·
+              {{ mirrors.speedtest.ok }} 个可用 / {{ mirrors.speedtest.failed }} 个不可达
+            </p>
+            <div class="mirror-actions">
+              <v-btn
+                size="small"
+                variant="outlined"
+                :disabled="!mirrors || mirrors.current === mirrors.official || mirrorTaskRunning"
+                @click="mirrors && selectMirror(mirrors.official, 'GitHub 官方源')"
+              >
+                官方源
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="primary"
+                :prepend-icon="mdiAutoFix"
+                :disabled="!mirrors || (mirrors.enabled && mirrors.auto) || mirrorTaskRunning"
+                @click="enableSmartMirror"
+              >
+                开启智能加速
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="outlined"
+                :prepend-icon="mdiSpeedometer"
+                :disabled="!mirrors || !mirrors.enabled || mirrorTaskRunning"
+                @click="startMirrorTask('/api/mirrors/auto-select', '测速选优已开始', '选优完成，列表已刷新')"
+              >
+                立即选优
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="outlined"
+                :prepend-icon="mdiSpeedometer"
+                :disabled="!mirrors || mirrorTaskRunning"
+                @click="startMirrorTask('/api/mirrors/speedtest', '全量测速已开始', '测速完成，列表已刷新')"
+              >
+                全量测速
+              </v-btn>
+            </div>
             <div class="mirror-list">
               <v-btn
-                v-for="mirror in mirrors?.mirrors ?? []"
-                :key="mirror.key"
-                :variant="mirror.key === mirrors?.current ? 'tonal' : 'outlined'"
-                :color="mirror.key === mirrors?.current ? 'primary' : undefined"
+                v-for="mirror in rankedMirrors"
+                :key="mirror.host"
+                :variant="mirror.host === mirrors?.current ? 'tonal' : 'outlined'"
+                :color="mirror.host === mirrors?.current ? 'primary' : undefined"
                 size="small"
-                :prepend-icon="mirror.key === mirrors?.current ? mdiCheck : undefined"
-                :disabled="mirror.key === mirrors?.current"
-                @click="selectMirror(mirror.key, mirror.display)"
+                :prepend-icon="mirror.host === mirrors?.current ? mdiCheck : undefined"
+                :disabled="mirror.host === mirrors?.current || mirrorTaskRunning"
+                @click="selectMirror(mirror.host, mirror.host)"
               >
-                {{ mirror.display }}
+                {{ mirror.host }}
+                <span class="mirror-latency" :class="{ failed: mirror.failed }">
+                  {{ mirror.latency_ms !== null ? `${mirror.latency_ms}ms` : mirror.reported_ms !== null ? `~${mirror.reported_ms}ms` : "" }}
+                </span>
               </v-btn>
             </div>
             <p v-if="!mirrors" class="muted-hint">镜像列表加载中…</p>
+            <p class="muted-hint">点选任意镜像 = 手动模式；智能模式下未选定自动选优，且仅在当前镜像失效时自动切换。</p>
           </v-card-text>
         </v-card>
       </v-window-item>
@@ -299,10 +403,39 @@ async function selectMirror(key: string, display: string): Promise<void> {
   color: var(--text-secondary);
 }
 
+.mirror-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mirror-current {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.mirror-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
 .mirror-list {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.mirror-latency {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.mirror-latency.failed {
+  text-decoration: line-through;
 }
 
 .muted-hint {

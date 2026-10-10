@@ -13,6 +13,14 @@ import { getLogBus } from "./logBus.ts";
 import { logError } from "./errorLog.ts";
 import { checkoutBranchForce } from "./gitOps.ts";
 import { getConfigStore } from "./configStore.ts";
+import {
+  activeMirrorHost,
+  applyGitMirrorConfig,
+  ensureSmartMirrorAndApply,
+  failoverOnNetworkError,
+  mirrorDisplayName,
+  setMirrorChoice,
+} from "./mirrors.ts";
 
 // ---------- 环境检测 ----------
 
@@ -130,7 +138,7 @@ export function resetStProcessManager(): void {
 // ---------- npm ----------
 
 function usingMirror(): boolean {
-  return getConfigStore().get<string>("github.mirror", "github") !== "github";
+  return activeMirrorHost() !== "github";
 }
 
 export async function npmInstall(
@@ -180,8 +188,14 @@ export async function installSillytavern(options: InstallOptions): Promise<{ ok:
     await fsp.rm(target, { recursive: true, force: true });
   }
 
-  const mirror = options.mirror ?? getConfigStore().get<string>("github.mirror", "github");
-  say(`正在克隆 SillyTavern 仓库 (使用 ${mirror} 镜像)...`);
+  if (options.mirror !== undefined) {
+    const key = setMirrorChoice(options.mirror);
+    await applyGitMirrorConfig(key);
+    say(`镜像已设置为: ${mirrorDisplayName(key)}`);
+  }
+  // 智能镜像自愈：自动模式下未选定/结果过期（>12h）时测速选优并同步 gitconfig
+  await ensureSmartMirrorAndApply(say);
+  say(`正在克隆 SillyTavern 仓库 (使用 ${mirrorDisplayName(activeMirrorHost())})...`);
   const record = (action: string, status: string) => {
     const store = getConfigStore();
     const downloads = store.get<unknown[]>("downloads", []);
@@ -192,10 +206,16 @@ export async function installSillytavern(options: InstallOptions): Promise<{ ok:
   record("install", "started");
 
   // gitconfig 的 url.*.insteadof 会自动把 GitHub URL 重写为镜像地址
-  const clone = await run(["git", "clone", "https://github.com/SillyTavern/SillyTavern.git", "SillyTavern"], {
-    cwd: undefined,
-    timeoutMs: 30 * 60_000,
-  });
+  const cloneOnce = () =>
+    run(["git", "clone", "https://github.com/SillyTavern/SillyTavern.git", "SillyTavern"], {
+      cwd: undefined,
+      timeoutMs: 30 * 60_000,
+    });
+  let clone = await cloneOnce();
+  if (!clone.ok && (await failoverOnNetworkError(clone.stderr, say))) {
+    // 当前镜像取证判死且已切换 → 重试一次
+    clone = await cloneOnce();
+  }
   for (const line of clone.stdout.split("\n")) if (line.trim()) say(line.trim());
   if (!clone.ok) {
     say("克隆失败");
@@ -270,6 +290,9 @@ export async function updateSillytavern(onLine?: (line: string) => void): Promis
     }
   }
 
+  // 智能镜像自愈（自动模式 + 过期/未选定才动作；fetch 走 gitconfig 重写）
+  await ensureSmartMirrorAndApply(say);
+
   try {
     // 清理未完成的合并/rebase
     const gitDir = join(dir, ".git");
@@ -285,21 +308,35 @@ export async function updateSillytavern(onLine?: (line: string) => void): Promis
       say("已清理未完成的操作状态");
     }
 
-    const force = await checkoutBranchForce("release", dir);
+    let force = await checkoutBranchForce("release", dir);
+    if (!force.ok && (await failoverOnNetworkError(force.message, say))) {
+      force = await checkoutBranchForce("release", dir); // 镜像已切换 → 重试一次
+    }
     if (!force.ok) {
       return { ok: false, message: `切换到 release 分支失败: ${force.message}` };
     }
     say("成功切换到 release 分支");
-    say("正在拉取最新代码...");
 
-    let pullOk = await runWithEcho(["git", "pull", "--rebase", "--autostash"], { cwd: dir, timeoutMs: 10 * 60_000, onLine: say });
+    // pull 用 run 捕获 stderr（网络类失败要做镜像故障取证）
+    const pullOnce = (): Promise<{ ok: boolean; stderr: string }> => {
+      say("正在拉取最新代码...");
+      return run(["git", "pull", "--rebase", "--autostash"], { cwd: dir, timeoutMs: 10 * 60_000, onLine: say }).then(
+        (result) => ({ ok: result.ok, stderr: result.stderr }),
+      );
+    };
+
+    let pull = await pullOnce();
+    if (!pull.ok && (await failoverOnNetworkError(pull.stderr, say))) {
+      pull = await pullOnce(); // 镜像已切换 → 重试一次
+    }
+    let pullOk = pull.ok;
     if (!pullOk) {
       say("Git更新失败，尝试自动解决冲突...");
       const status = await run(["git", "status", "--porcelain"], { cwd: dir });
       if (status.stdout.includes("package-lock.json")) {
         await run(["git", "checkout", "--", "package-lock.json"], { cwd: dir });
         say("已重置 package-lock.json，重新尝试更新...");
-        pullOk = await runWithEcho(["git", "pull", "--rebase", "--autostash"], { cwd: dir, timeoutMs: 10 * 60_000, onLine: say });
+        pullOk = (await pullOnce()).ok;
       }
       if (!pullOk) {
         say("自动解决冲突失败，使用强制更新...");

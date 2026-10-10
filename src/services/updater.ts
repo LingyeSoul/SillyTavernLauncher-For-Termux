@@ -2,7 +2,7 @@
  * 启动器自更新检查 — raw version 文件版本比对。
  * ← src/update_checker.py。远端解析同时兼容旧版 version.py 与新版 version.ts。
  */
-import { buildRawUrl } from "./mirrors.ts";
+import { activeMirrorHost, applyMirrorPrefix, normalizeMirrorValue } from "./mirrors.ts";
 import { compareVersions } from "./gitOps.ts";
 import { LAUNCHER_VERSION } from "../version.ts";
 
@@ -20,15 +20,18 @@ export function isDevVersion(version: string): boolean {
   return ["dev", "alpha", "beta", "rc", "test"].some((k) => lower.includes(k));
 }
 
-async function fetchLatestVersion(mirror: string): Promise<string | null> {
-  if (process.env.STL_NO_NETWORK === "1") return null;
-  const url = buildRawUrl(
-    "LingyeSoul",
-    "SillyTavernLauncher-For-Termux",
-    "main",
-    "src/version.ts",
-    mirror,
+/** 远端 version 文件地址（经当前镜像前缀改写；显式传入的 mirror 兼容旧配置键值） */
+function latestVersionUrl(mirror?: string): string {
+  const host = mirror !== undefined ? normalizeMirrorValue(mirror) : activeMirrorHost();
+  return applyMirrorPrefix(
+    "https://raw.githubusercontent.com/LingyeSoul/SillyTavernLauncher-For-Termux/main/src/version.ts",
+    host,
   );
+}
+
+async function fetchLatestVersion(mirror?: string): Promise<string | null> {
+  if (process.env.STL_NO_NETWORK === "1") return null;
+  const url = latestVersionUrl(mirror);
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": "SillyTavernLauncher/1.0" },
@@ -50,7 +53,7 @@ async function fetchLatestVersion(mirror: string): Promise<string | null> {
 }
 
 export async function checkForUpdates(
-  mirror = "github",
+  mirror?: string,
   allowDev = false,
   currentVersion = LAUNCHER_VERSION,
 ): Promise<UpdateCheckResult> {

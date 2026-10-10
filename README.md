@@ -11,7 +11,7 @@ SillyTavernLauncher 仅为 SillyTavern 应用的启动管理工具（启动器 +
 - 🖥️ **完整 CLI** — `st` 交互菜单 + 全量子命令
 - 一键安装 / 启动 / 停止 / 更新 SillyTavern，一键启动模式
 - 🔄 **跨设备数据同步**（Windows PC ↔ Android Termux）：令牌认证的局域网同步服务器/客户端，ZIP 全量 + SHA-256 增量，事务式替换 + 自动备份回滚
-- 🪞 **GitHub 镜像加速**（gh-proxy / gh.llkk / 自定义域名，gitconfig 全局重写 + npmmirror 联动）
+- 🪞 **智能 GitHub 镜像加速**（54 站注册表：未选定自动测速选优、仅在镜像失效时取证切换、支持手动模式，gitconfig 全局重写 + npmmirror 联动）
 - 🏷️ **版本管理** — SillyTavern 历史版本（tag）列表与一键切换
 - ⚙️ **ST 配置管理** — config.yaml 注释保留式读写、端口/局域网监听/IP 与 Host 白名单、网段自动检测
 - 📦 **迁移器** — 扫描设备上已有的 SillyTavern 安装并迁移
@@ -49,7 +49,7 @@ st webui        # 启动 WebUI（默认 http://127.0.0.1:8300）
 - `st update [st|stl|dev]` - 更新 SillyTavern / 启动器 / 强制开发版
 - `st config` - 显示当前配置
 - `st autostart enable|disable` - 一键启动开关
-- `st set-mirror <github|ghproxy|ghllkk|域名>` - 设置 GitHub 镜像
+- `st set-mirror <github|auto|域名>` - GitHub 镜像：github=官方源，auto=智能模式（自动选优，仅失效时切换），其他=手动指定（旧键 ghproxy/ghllkk 仍兼容）
 - `st sync start [--port N]` / `stop` / `info` / `rotate-token` / `menu` - 同步服务器管理
 - `st sync from --server-url 'http://192.168.1.10:9999#token=...'` - 从分享地址同步数据
 - `st version info|list|switch --version-str 1.5.0` - 版本管理
@@ -65,7 +65,7 @@ st webui        # 启动 WebUI（默认 http://127.0.0.1:8300）
 - **状态页** — 启动/停止/重启/安装/更新、访问地址与环境检测、启动器更新横幅
 - **日志页** — SillyTavern 进程与任务实时日志（SSE 推送）
 - **同步页** — 同步服务器启停、分享地址复制、令牌轮换、从远端拉取
-- **配置页** — ST 端口/监听/白名单、GitHub 镜像切换
+- **配置页** — ST 端口/监听/白名单、智能 GitHub 镜像（测速选优 / 全量测速 / 手动点选）
 - **更多** — 历史版本切换、迁移扫描、依赖一键修复、启动器重启
 
 安全边界：默认只监听 `127.0.0.1`；如配置为局域网监听（`config.json` 的 `webui.host`）会自动启用访问令牌（`webui.token`），通过 `?token=` 或 Bearer 头认证。

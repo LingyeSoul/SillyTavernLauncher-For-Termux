@@ -20,7 +20,19 @@ import { getLogBus } from "../services/logBus.ts";
 import { logError } from "../services/errorLog.ts";
 import { checkAgreementState } from "../services/agreement.ts";
 import { getLocalIp } from "../services/network.ts";
-import { MIRROR_LIST, validateMirrorInput, applyGitMirrorConfig } from "../services/mirrors.ts";
+import {
+  MIRROR_SOURCES,
+  activeMirrorHost,
+  applyGitMirrorConfig,
+  autoSelectMirror,
+  createMirrorPingProbe,
+  mirrorDisplayName,
+  readMirrorState,
+  setMirrorChoice,
+  speedTestMirrors,
+  validateMirrorInput,
+  writeMirrorState,
+} from "../services/mirrors.ts";
 import {
   checkSystemEnv,
   fixNodeModules,
@@ -37,7 +49,7 @@ import { scanForInstallations, migrateInstallation, type MigrateMode } from "../
 
 const PUBLIC_DIR = resolve(fileURLToPath(import.meta.url), "..", "public");
 
-type TaskKind = "install" | "stUpdate" | "launcherUpdate" | "syncFrom" | "repair";
+type TaskKind = "install" | "stUpdate" | "launcherUpdate" | "syncFrom" | "repair" | "mirror";
 const tasks = new Set<TaskKind>();
 
 export function busyTasks(): TaskKind[] {
@@ -132,7 +144,7 @@ let updateCheckCache: { at: number; result: unknown } | null = null;
 async function cachedUpdateCheck(): Promise<unknown> {
   if (updateCheckCache && Date.now() - updateCheckCache.at < 300_000) return updateCheckCache.result;
   const store = getConfigStore();
-  const result = await checkForUpdates(store.get<string>("github.mirror", "github")).catch(() => null);
+  const result = await checkForUpdates(activeMirrorHost(store)).catch(() => null);
   updateCheckCache = { at: Date.now(), result };
   return result;
 }
@@ -144,6 +156,7 @@ async function fullStatus() {
   const env = checkSystemEnv();
   const versionInfo = isStInstalled() ? await getVersionInfo() : null;
   const stConfig = isStInstalled() ? new StConfig().state : null;
+  const mirrorState = readMirrorState(store);
   return {
     launcher_version: LAUNCHER_VERSION,
     installed: isStInstalled(),
@@ -153,7 +166,10 @@ async function fullStatus() {
     env,
     local_ip: await getLocalIp(),
     startup: store.get<string>("startup", "menu"),
-    mirror: store.get<string>("github.mirror", "github"),
+    mirror: activeMirrorHost(store),
+    mirror_display: mirrorDisplayName(activeMirrorHost(store)),
+    mirror_enabled: mirrorState.enabled,
+    mirror_auto: mirrorState.auto,
     busy: busyTasks(),
     agreement_required: agreement.required,
     update: await cachedUpdateCheck(),
@@ -291,7 +307,28 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
         return;
       }
       if (req.method === "GET" && pathname === "/api/mirrors") {
-        send(res, 200, { success: true, mirrors: MIRROR_LIST, current: store.get<string>("github.mirror", "github") });
+        const state = readMirrorState(store);
+        const active = activeMirrorHost(store);
+        send(res, 200, {
+          success: true,
+          official: "github",
+          current: active,
+          display: mirrorDisplayName(active),
+          enabled: state.enabled,
+          auto: state.auto,
+          speedtest: {
+            tested_at: state.speedtest.tested_at,
+            ok: Object.keys(state.speedtest.results).length,
+            failed: state.speedtest.failed.length,
+          },
+          mirrors: MIRROR_SOURCES.map((source) => ({
+            host: source.host,
+            tier: source.tier,
+            reported_ms: source.reportedMs ?? null,
+            latency_ms: state.speedtest.results[source.host] ?? null,
+            failed: state.speedtest.failed.includes(source.host),
+          })),
+        });
         return;
       }
       if (req.method === "GET" && pathname === "/api/versions") {
@@ -403,16 +440,61 @@ export function createWebuiHandler(options: WebuiOptions = {}) {
           return;
         }
         case "/api/config/mirror": {
+          // mirror: 'github'（官方源）| 镜像域名（手动模式）；enabled=true 单独传 = 开启智能模式
           const mirror = typeof body.mirror === "string" ? body.mirror : "";
-          const validated = validateMirrorInput(mirror);
-          if (!validated.ok) {
-            send(res, 400, { success: false, error: validated.message });
+          const enabled = body.enabled === undefined ? undefined : body.enabled === true;
+          const auto = body.auto === undefined ? undefined : body.auto === true;
+          if (mirror === "" && enabled === undefined && auto === undefined) {
+            send(res, 400, { success: false, error: "需要 mirror / enabled / auto 之一" });
             return;
           }
-          store.set("github.mirror", validated.key);
-          store.save();
-          await applyGitMirrorConfig(validated.key);
-          send(res, 200, { success: true, mirror: validated.key });
+          if (mirror !== "") {
+            const validated = validateMirrorInput(mirror);
+            if (!validated.ok) {
+              send(res, 400, { success: false, error: validated.message });
+              return;
+            }
+            setMirrorChoice(validated.key, store);
+          }
+          if (enabled === true) writeMirrorState({ enabled: true, auto: auto ?? true }, store);
+          else if (enabled === false) writeMirrorState({ enabled: false }, store);
+          else if (auto !== undefined) writeMirrorState({ auto }, store);
+          await applyGitMirrorConfig(activeMirrorHost(store));
+          send(res, 200, {
+            success: true,
+            mirror: activeMirrorHost(store),
+            enabled: readMirrorState(store).enabled,
+            auto: readMirrorState(store).auto,
+          });
+          return;
+        }
+        case "/api/mirrors/speedtest": {
+          await withTask("mirror", async () => {
+            const bus = getLogBus();
+            bus.push("task", `镜像全量测速开始（${MIRROR_SOURCES.length} 站，ping 探测）`);
+            const speedtest = await speedTestMirrors(
+              MIRROR_SOURCES.map((source) => source.host),
+              {
+                probe: createMirrorPingProbe(),
+                onResult: (host, latency) =>
+                  bus.push("task", `测速 ${host}: ${latency === null ? "不可达" : `${latency}ms`}`),
+              },
+            );
+            writeMirrorState({ speedtest }, store);
+            const ok = Object.keys(speedtest.results).length;
+            return { ok: true, message: `测速完成：${ok} 个可用 / ${speedtest.failed.length} 个不可达` };
+          });
+          return;
+        }
+        case "/api/mirrors/auto-select": {
+          await withTask("mirror", async () => {
+            const bus = getLogBus();
+            writeMirrorState({ enabled: true, auto: true }, store);
+            bus.push("task", "镜像自动测速选优开始");
+            const outcome = await autoSelectMirror({ probe: createMirrorPingProbe() });
+            if (outcome.host) await applyGitMirrorConfig(outcome.host, (line) => bus.push("task", line));
+            return { ok: !outcome.exhausted, message: outcome.message };
+          });
           return;
         }
         case "/api/st-config": {

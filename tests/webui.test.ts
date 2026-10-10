@@ -108,4 +108,47 @@ describe("WEBUI API", () => {
       await close();
     }
   });
+
+  it("智能镜像：注册表读取 / 智能模式开关 / 手动选择 / 测速任务受理", async () => {
+    // 隔离全局 gitconfig（applyGitMirrorConfig 会写 --global 配置）
+    const gitConfig = path.join(makeDataDir(), "gitconfig");
+    process.env.GIT_CONFIG_GLOBAL = gitConfig;
+    const handler = createWebuiHandler({ host: "127.0.0.1" });
+    const { port, close } = await withServer((req, res) => void handler(req, res));
+    try {
+      await post(port, "/api/agreement/accept", { accepted: true });
+
+      const list = await get(port, "/api/mirrors");
+      expect(list.status).toBe(200);
+      const payload = JSON.parse(list.text);
+      expect(payload.current).toBe("github");
+      expect(payload.enabled).toBe(false);
+      expect(payload.mirrors.length).toBeGreaterThan(10);
+      expect(payload.mirrors[0]).toMatchObject({ host: "github.dpik.top", tier: "fast" });
+
+      const smart = await post(port, "/api/config/mirror", { enabled: true });
+      expect(smart.status).toBe(200);
+      expect(JSON.parse(smart.text)).toMatchObject({ enabled: true, auto: true });
+
+      const manual = await post(port, "/api/config/mirror", { mirror: "gh.llkk.cc" });
+      expect(manual.status).toBe(200);
+      expect(JSON.parse(manual.text)).toMatchObject({ mirror: "gh.llkk.cc", enabled: true, auto: false });
+
+      const legacy = await post(port, "/api/config/mirror", { mirror: "ghproxy" });
+      expect(legacy.status).toBe(200);
+      expect(JSON.parse(legacy.text).mirror).toBe("gh-proxy.org");
+
+      const empty = await post(port, "/api/config/mirror", {});
+      expect(empty.status).toBe(400);
+
+      const speedtest = await post(port, "/api/mirrors/speedtest", {});
+      expect(speedtest.status).toBe(202);
+
+      const autoSelect = await post(port, "/api/mirrors/auto-select", {});
+      expect(autoSelect.status).toBe(202);
+    } finally {
+      delete process.env.GIT_CONFIG_GLOBAL;
+      await close();
+    }
+  });
 });

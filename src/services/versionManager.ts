@@ -16,6 +16,7 @@ import {
   type VersionTagInfo,
 } from "./gitOps.ts";
 import { npmInstall } from "./stLifecycle.ts";
+import { ensureSmartMirrorAndApply } from "./mirrors.ts";
 
 export interface VersionListResult {
   success: boolean;
@@ -39,6 +40,8 @@ export async function fetchStVersions(dir = stDir()): Promise<VersionListResult>
 }
 
 export async function updateRemoteTags(dir = stDir()): Promise<{ success: boolean; message: string }> {
+  // fetch 走 gitconfig 镜像重写：先做智能自愈（自动模式 + 过期才动作）
+  await ensureSmartMirrorAndApply();
   const result = await fetchRemoteTags(dir);
   return { success: result.ok, message: result.message };
 }

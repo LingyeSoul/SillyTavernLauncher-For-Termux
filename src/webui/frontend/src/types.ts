@@ -47,6 +47,9 @@ export interface StatusPayload {
   local_ip: string;
   startup: string;
   mirror: string;
+  mirror_display?: string;
+  mirror_enabled?: boolean;
+  mirror_auto?: boolean;
   busy: string[];
   agreement_required: boolean;
   update: UpdateInfo | null;
@@ -82,13 +85,21 @@ export interface VersionsResponse {
 }
 
 export interface MirrorEntry {
-  key: string;
-  display: string;
+  host: string;
+  tier: "fast" | "medium" | "legacy";
+  reported_ms: number | null;
+  latency_ms: number | null;
+  failed: boolean;
 }
 
 export interface MirrorsResponse {
-  mirrors: MirrorEntry[];
+  official: string;
   current: string;
+  display: string;
+  enabled: boolean;
+  auto: boolean;
+  speedtest: { tested_at: string; ok: number; failed: number };
+  mirrors: MirrorEntry[];
 }
 
 export interface MigrationInstallation {
