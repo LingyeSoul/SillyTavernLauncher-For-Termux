@@ -6,6 +6,7 @@
 import { nextTick, ref, watch } from "vue";
 import { mdiTextBoxOutline } from "@mdi/js";
 import type { LogLine } from "../types";
+import EmptyState from "./EmptyState.vue";
 
 const props = defineProps<{
   lines: LogLine[];
@@ -47,14 +48,14 @@ function formatTime(iso: string): string {
 </script>
 
 <template>
-  <div ref="wrap" class="log-console" @scroll="onScroll">
-    <div v-if="!lines.length" class="stl-empty" style="padding: 32px 12px">
-      <div class="empty-mark">
-        <v-icon :icon="mdiTextBoxOutline" size="28" />
-      </div>
-      <div class="empty-title">暂无日志</div>
-      <div class="empty-hint">操作启动器后，输出会实时出现在这里</div>
-    </div>
+  <div ref="wrap" class="log-console" role="log" aria-live="polite" @scroll="onScroll">
+    <EmptyState
+      v-if="!lines.length"
+      :icon="mdiTextBoxOutline"
+      title="暂无日志"
+      hint="操作启动器后，输出会实时出现在这里"
+      style="padding: 32px 12px"
+    />
     <div v-for="line in lines" :key="line.seq" class="log-line" :class="lineClass(line)">
       <span class="log-time">{{ formatTime(line.time) }}</span>
       <span class="log-tag">[{{ line.source }}]</span>{{ line.text }}

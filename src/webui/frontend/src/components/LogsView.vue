@@ -3,19 +3,15 @@
 import { ref } from "vue";
 import { store } from "../composables/launcher";
 import LogStream from "./LogStream.vue";
+import PageHeader from "./PageHeader.vue";
 
 const autoScroll = ref(true);
 </script>
 
 <template>
   <div class="logs-view">
-    <div class="workspace-heading">
-      <div>
-        <h1>实时日志</h1>
-        <p class="heading-sub">{{ store.logs.length }} 行 · SSE 流</p>
-      </div>
-      <v-spacer />
-      <div class="heading-actions">
+    <PageHeader title="实时日志" :sub="`${store.logs.length} 行 · SSE 流`">
+      <template #actions>
         <v-chip v-if="store.busy.length" color="primary" variant="tonal" size="small">
           {{ store.busy.join(" · ") }}
         </v-chip>
@@ -31,8 +27,8 @@ const autoScroll = ref(true);
           density="compact"
           class="log-switch"
         />
-      </div>
-    </div>
+      </template>
+    </PageHeader>
     <LogStream :lines="store.logs" :auto-scroll="autoScroll" />
   </div>
 </template>
@@ -48,12 +44,6 @@ const autoScroll = ref(true);
 
 .logs-view .workspace-heading {
   margin-bottom: 16px;
-}
-
-.heading-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
 }
 
 .log-switch :deep(.v-selection-control) {

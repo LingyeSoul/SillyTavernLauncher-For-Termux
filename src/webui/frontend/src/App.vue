@@ -196,25 +196,3 @@ onMounted(initLauncher);
     </v-snackbar>
   </v-app>
 </template>
-
-<style scoped>
-.workspace-nav-list {
-  padding: 8px 0;
-}
-
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.topbar-title {
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-</style>
