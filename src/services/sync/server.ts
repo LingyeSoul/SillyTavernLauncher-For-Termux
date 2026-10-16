@@ -28,13 +28,18 @@ export interface ManifestItem {
   mtime: number;
   modified: string;
   is_dir: boolean;
-  sha256: string;
+  /** 本端清单始终提供；对端清单（如旧版 Windows 桌面端）可能缺失，客户端按 null 降级比较。 */
+  sha256: string | null;
 }
 
 export type TokenProvider = () => string;
 export type ServerInfoProvider = () => Record<string, unknown>;
 
-/** 遍历数据目录内的普通文件，不跟随任何符号链接。 */
+/**
+ * 遍历数据目录内可同步的普通文件，不跟随任何符号链接。
+ * 与 Windows 桌面端过滤规则逐条对齐：隐藏目录不递归，隐藏文件与 .tmp 临时文件不参与同步，
+ * 保证两端 manifest/ZIP 内容一致（避免增量同步反复重下或误删对端独有的文件）。
+ */
 export async function* iterDataFiles(baseDir: string): AsyncGenerator<{ absPath: string; relPath: string }> {
   const base = fs.realpathSync(baseDir);
   if (!fs.statSync(base).isDirectory()) return;
@@ -45,8 +50,10 @@ export async function* iterDataFiles(baseDir: string): AsyncGenerator<{ absPath:
       const abs = resolve(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
+        if (entry.name.startsWith(".")) continue;
         yield* walk(abs);
       } else if (entry.isFile()) {
+        if (entry.name.startsWith(".") || entry.name.endsWith(".tmp")) continue;
         const target = fs.realpathSync(abs);
         if (target.startsWith(base + sep)) {
           yield { absPath: target, relPath: relative(base, target).split(sep).join("/") };
@@ -103,6 +110,16 @@ function errorStatus(error: unknown): number {
   if (error instanceof SyncSecurityError) return 403;
   if (error instanceof SyncUsageError) return 404;
   return 500;
+}
+
+/**
+ * 构造下载响应的 Content-Disposition（RFC 6266/5987）：
+ * HTTP 头只允许 ASCII，中文等非 ASCII 文件名直接拼接会令 Node 抛 TypeError 变成 500，
+ * 必须走 filename* 百分号编码，并为老客户端保留 ASCII 回退名。
+ */
+export function contentDisposition(fileName: string): string {
+  const asciiFallback = fileName.replace(/[^\x20-\x7E]/g, "_").replace(/["\\]/g, "_");
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 /** 解析一个可下载文件，拒绝目录穿越、目录本身和符号链接。 */
@@ -216,7 +233,7 @@ export function createSyncHandler(options: SyncHandlerOptions) {
           "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff",
           "Content-Length": stat.size,
-          "Content-Disposition": `attachment; filename="${relativePath.split("/").pop()}"`,
+          "Content-Disposition": contentDisposition(relativePath.split("/").pop() ?? "sync-file"),
         });
         const stream = fs.createReadStream(target);
         stream.pipe(res);

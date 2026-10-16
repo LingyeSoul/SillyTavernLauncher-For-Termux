@@ -56,12 +56,12 @@ export async function withServer(
   };
 }
 
-export function get(port: number, pathName: string, headers: Record<string, string> = {}): Promise<{ status: number; text: string; buffer: Buffer }> {
+export function get(port: number, pathName: string, headers: Record<string, string> = {}): Promise<{ status: number; text: string; buffer: Buffer; headers: http.IncomingHttpHeaders }> {
   return new Promise((resolve, reject) => {
     const req = http.get({ host: "127.0.0.1", port, path: pathName, headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (c) => chunks.push(c));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf-8"), buffer: Buffer.concat(chunks) }));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf-8"), buffer: Buffer.concat(chunks), headers: res.headers }));
     });
     req.on("error", reject);
   });

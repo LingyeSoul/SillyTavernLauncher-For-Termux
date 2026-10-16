@@ -1,6 +1,6 @@
 {
   "name": "sillytavern-launcher-for-termux",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "SillyTavern launcher for Termux (Node.js/TypeScript) with WebUI",
   "type": "module",
   "private": true,

@@ -56,7 +56,7 @@ st webui        # 启动 WebUI（默认 http://127.0.0.1:8300，自动打开浏�
 - `st st-config port --st-port 8000` / `listen --enable-listen` - ST 配置
 - `st migrate scan` / `from --source-path <path>` - 迁移已有安装
 
-同步服务器启动后会显示形如 `http://192.168.1.10:9999#token=...` 的分享地址。令牌放在 URL fragment 中，不会进入 HTTP 请求日志；除 `/health` 外的接口都要求该令牌。
+同步服务器启动后会显示形如 `http://192.168.1.10:9999#token=...` 的分享地址。令牌放在 URL fragment 中，不会进入 HTTP 请求日志；除 `/health` 外的接口都要求该令牌。同步范围与 Windows 桌面端一致：隐藏文件（`.` 开头）、隐藏目录与 `.tmp` 临时文件不参与同步；对端清单缺少 SHA-256 时增量比较自动降级为大小 + 修改时间。
 
 ## WebUI
 

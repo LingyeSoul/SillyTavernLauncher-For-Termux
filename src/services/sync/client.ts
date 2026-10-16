@@ -4,7 +4,8 @@
  *   - 分享地址 token 只允许出现在 fragment，绝不进入请求 URL
  *   - ZIP 炸弹限制（文件数 / 解压总量 / 下载字节数）
  *   - 加密条目、符号链接、路径冲突全拒绝；解压前不触碰目标目录
- *   - 增量同步逐文件 sha256 校验 + 声明大小上限；备份 + 事务式替换 + 回滚
+ *   - 增量同步逐文件完整性校验（对端提供 sha256 时校验哈希，缺失时按声明大小上限兜底）
+ *     + 备份 + 事务式替换 + 回滚
  */
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -131,7 +132,7 @@ export class SyncClient {
     return payload;
   }
 
-  /** 远端清单：逐条校验路径安全、重复、sha256 格式、大小/mtime 类型。 */
+  /** 远端清单：逐条校验路径安全、重复、大小/mtime 类型；sha256 可缺失（旧版 Windows 桌面端清单），但存在时必须合法。 */
   private async remoteManifest(): Promise<ManifestItem[]> {
     const response = await this.request("manifest");
     let manifest: unknown;
@@ -160,8 +161,7 @@ export class SyncClient {
         typeof size !== "number" ||
         !Number.isInteger(size) ||
         size < 0 ||
-        typeof digest !== "string" ||
-        !hex.test(digest)
+        (digest !== undefined && digest !== null && (typeof digest !== "string" || !hex.test(digest)))
       ) {
         throw new SyncNetworkError("文件清单元数据无效");
       }
@@ -175,7 +175,7 @@ export class SyncClient {
         mtime: (mtime as number) ?? 0,
         modified: String(item.modified ?? ""),
         is_dir: false,
-        sha256: digest.toLowerCase(),
+        sha256: typeof digest === "string" && digest ? digest.toLowerCase() : null,
       });
     }
     for (const path of seen) {
@@ -277,6 +277,8 @@ export class SyncClient {
       for (const [path, entry] of entries) {
         const target = safeRelativePath(payload, path);
         targets.set(path, target);
+        // ZIP 内不生成目录条目（含 fflate 等第三方打包端），解压前必须先建父目录
+        await fsp.mkdir(dirname(target), { recursive: true });
         await extractZipEntry(archivePath, entry, target);
       }
       await this.replaceData(payload, savedBackup);
@@ -294,9 +296,13 @@ export class SyncClient {
     const local = await this.getLocalManifest();
     const localByPath = new Map(local.map((item) => [item.path, item]));
 
-    const downloads = remote.filter(
-      (item) => !localByPath.has(item.path) || item.sha256 !== localByPath.get(item.path)!.sha256,
-    );
+    const downloads = remote.filter((item) => {
+      const localItem = localByPath.get(item.path);
+      if (!localItem) return true;
+      if (item.sha256 !== null) return item.sha256 !== localItem.sha256;
+      // 对端清单无 sha256（旧版 Windows 桌面端）：退回大小 + 修改时间比较，容差吸收文件系统时间精度差
+      return item.size !== localItem.size || Math.abs(item.mtime - localItem.mtime) > 1;
+    });
     const deletes = [...localByPath.keys()].filter((path) => !remoteByPath.has(path));
     const savedBackup = backup && (downloads.length > 0 || deletes.length > 0) ? await this.backup() : null;
     await fsp.mkdir(this.dataPath, { recursive: true });
@@ -328,7 +334,7 @@ export class SyncClient {
         } finally {
           await fd.close();
         }
-        if (downloadedSize !== item.size || hash.digest("hex") !== item.sha256) {
+        if (downloadedSize !== item.size || (item.sha256 !== null && hash.digest("hex") !== item.sha256)) {
           throw new SyncSecurityError("下载文件完整性校验失败");
         }
       }
