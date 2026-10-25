@@ -201,6 +201,7 @@ export class SyncManager {
     serverUrl: string,
     method: "auto" | "zip" | "incremental" = "auto",
     backup = true,
+    allowEmptyRemote = false,
   ): Promise<{ ok: boolean; message: string }> {
     const say = (line: string) => {
       process.stdout.write(line + "\n");
@@ -217,7 +218,7 @@ export class SyncManager {
         const serverInfo = info.server_info as { file_count?: number; total_size?: number };
         say(`服务器信息: 文件数量 ${serverInfo.file_count ?? 0}，总大小 ${formatSize(serverInfo.total_size ?? 0)}`);
       }
-      const result = await client.sync(method, backup);
+      const result = await client.sync(method, backup, allowEmptyRemote);
       return { ok: true, message: `数据同步完成 (${result.method})` };
     } catch (error) {
       return { ok: false, message: `数据同步失败: ${String(error)}` };

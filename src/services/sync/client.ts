@@ -10,7 +10,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import {
   MAX_SYNC_ZIP_SIZE,
   SyncNetworkError,
@@ -143,6 +143,8 @@ export class SyncClient {
     }
     if (!Array.isArray(manifest)) throw new SyncNetworkError("同步服务器返回了无效文件清单");
 
+    // dataPath 自身可能是符号链接；安全层按其真实路径校验，这里用同一基址反推相对路径
+    const base = fs.existsSync(this.dataPath) ? fs.realpathSync(this.dataPath) : resolve(this.dataPath);
     const normalized: ManifestItem[] = [];
     const seen = new Set<string>();
     const hex = /^[0-9a-fA-F]{64}$/;
@@ -150,8 +152,12 @@ export class SyncClient {
       if (typeof raw !== "object" || raw === null) throw new SyncNetworkError("文件清单条目格式无效");
       const item = raw as Record<string, unknown>;
       const relativePath = item.path;
-      safeRelativePath(this.dataPath, relativePath);
-      const pathStr = String(relativePath);
+      const canonical = safeRelativePath(this.dataPath, relativePath);
+      // a//b、a/./b、a/b/ 归一为同一规范路径，避免绕过重复/冲突检查后撞同一目标
+      const pathStr = relative(base, canonical).split(sep).join("/");
+      if (!pathStr || pathStr === ".." || pathStr.startsWith("../")) {
+        throw new SyncSecurityError("同步文件路径越过数据目录");
+      }
       if (seen.has(pathStr)) throw new SyncSecurityError("文件清单包含重复路径");
       seen.add(pathStr);
 
@@ -289,11 +295,23 @@ export class SyncClient {
     }
   }
 
-  async syncIncremental(backup = true): Promise<SyncResult> {
+  async syncIncremental(backup = true, allowEmptyRemote = false): Promise<SyncResult> {
     process.stdout.write("开始增量同步...\n");
     const remote = await this.remoteManifest();
-    const remoteByPath = new Map(remote.map((item) => [item.path, item]));
     const local = await this.getLocalManifest();
+    if (remote.length === 0 && local.length > 0 && !allowEmptyRemote) {
+      const message =
+        `远端文件清单为空（0 个文件），本地存在 ${local.length} 个文件；` +
+        "已拒绝清空本地数据（如确需清空，请使用 ZIP 全量同步）";
+      process.stdout.write(`${message}\n`);
+      throw new SyncSecurityError(message);
+    }
+    if (remote.length === 0 && local.length > 0 && allowEmptyRemote) {
+      process.stdout.write(
+        `远端文件清单为空（0 个文件），已允许清空本地数据（allowEmptyRemote），将删除 ${local.length} 个文件\n`,
+      );
+    }
+    const remoteByPath = new Map(remote.map((item) => [item.path, item]));
     const localByPath = new Map(local.map((item) => [item.path, item]));
 
     const downloads = remote.filter((item) => {
@@ -377,17 +395,21 @@ export class SyncClient {
     };
   }
 
-  async sync(method: "auto" | "zip" | "incremental" = "auto", backup = true): Promise<SyncResult> {
+  async sync(
+    method: "auto" | "zip" | "incremental" = "auto",
+    backup = true,
+    allowEmptyRemote = false,
+  ): Promise<SyncResult> {
     await this.health();
     if (method === "zip") return this.syncFullZip(backup);
-    if (method === "incremental") return this.syncIncremental(backup);
+    if (method === "incremental") return this.syncIncremental(backup, allowEmptyRemote);
     if (method !== "auto") throw new SyncUsageError("同步方式必须是 auto、zip 或 incremental");
     try {
       return await this.syncFullZip(backup);
     } catch (error) {
       if (error instanceof SyncNetworkError) {
         process.stdout.write("ZIP 下载发生网络错误，改用增量同步...\n");
-        return this.syncIncremental(backup);
+        return this.syncIncremental(backup, allowEmptyRemote);
       }
       throw error;
     }
